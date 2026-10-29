@@ -1,0 +1,27 @@
+{
+  "variants": {
+    "facing=down": {
+      "model": "dreamworld:block/dream_graffiti",
+      "x": 270
+    },
+    "facing=up": {
+      "model": "dreamworld:block/dream_graffiti",
+      "x": 90
+    },
+    "facing=north": {
+      "model": "dreamworld:block/dream_graffiti",
+      "y": 180
+    },
+    "facing=south": {
+      "model": "dreamworld:block/dream_graffiti"
+    },
+    "facing=west": {
+      "model": "dreamworld:block/dream_graffiti",
+      "y": 90
+    },
+    "facing=east": {
+      "model": "dreamworld:block/dream_graffiti",
+      "y": 270
+    }
+  }
+}

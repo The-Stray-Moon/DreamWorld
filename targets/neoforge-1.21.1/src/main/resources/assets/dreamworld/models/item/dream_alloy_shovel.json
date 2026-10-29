@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/handheld",
+  "textures": {
+    "layer0": "dreamworld:item/dream_alloy_shovel"
+  }
+}

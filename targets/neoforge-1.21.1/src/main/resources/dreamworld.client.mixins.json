@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "cc.sighs.dreamworld.mixin.client",
+  "mixins": [],
+  "client": [
+    "ClientLevelMixin",
+    "ClientLevelPatchMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "minVersion": "0.8"
+}

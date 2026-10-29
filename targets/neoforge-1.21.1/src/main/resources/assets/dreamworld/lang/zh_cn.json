@@ -1,0 +1,19 @@
+{
+  "itemGroup.dreamworld": "梦世界",
+  "item.dreamworld.dream_clay": "梦境橡皮泥",
+  "item.dreamworld.dream_crystal": "梦境结晶",
+  "item.dreamworld.dream_powder": "梦境粉末",
+  "item.dreamworld.dream_tea": "梦境奶茶",
+  "item.dreamworld.dream_alloy": "梦境合金",
+  "item.dreamworld.dream_alloy_sword": "梦境合金剑",
+  "item.dreamworld.dream_alloy_shovel": "梦境合金铲",
+  "item.dreamworld.dream_alloy_wand": "梦境合金魔杖",
+  "item.dreamworld.dream_alloy_spear": "梦境合金矛",
+  "item.dreamworld.dream_rabbit_spawn_egg": "梦境兔子刷怪蛋",
+  "block.dreamworld.dream_graffiti": "梦境涂鸦",
+  "entity.dreamworld.dream_clay": "梦境橡皮泥",
+  "entity.dreamworld.dream_rabbit": "梦境兔子",
+  "entity.dreamworld.dream_spear": "梦境合金矛",
+  "effect.dreamworld.dream_walk": "梦游",
+  "hud.dreamworld.leave_tunnel": "跳跃脱离"
+}
