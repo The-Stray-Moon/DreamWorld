@@ -27,6 +27,8 @@ public final class DreamMobs {
     private static final int SPAWN_INTERVAL_TICKS = 200;
     private static final int CLEANUP_INTERVAL_TICKS = 20;
     private static final int RABBITS_NEARBY = 4;
+    /** Rabbits farther than this from every player are removed; they only exist near a dreamer. */
+    private static final int RABBIT_DESPAWN_RADIUS = 48;
     private static final int RABBIT_RADIUS = 32;
 
     private DreamMobs() {
@@ -57,6 +59,8 @@ public final class DreamMobs {
             }
             if (!hasDreamer) {
                 discardRabbits(level);
+            } else {
+                discardFarFromPlayers(level);
             }
         }
     }
@@ -145,6 +149,31 @@ public final class DreamMobs {
             }
         }
         return null;
+    }
+
+    /** Removes the rabbits of the level right away when nobody dreams in it any more. */
+    public static void discardIfNoDreamers(ServerLevel level) {
+        for (ServerPlayer player : level.players()) {
+            if (DreamManager.isDreaming(player)) {
+                return;
+            }
+        }
+        discardRabbits(level);
+    }
+
+    /** Removes rabbits that no player is near; a rabbit only exists around a dreamer. */
+    private static void discardFarFromPlayers(ServerLevel level) {
+        List<DreamRabbitEntity> stray = new ArrayList<>();
+        for (Entity entity : level.getAllEntities()) {
+            if (!(entity instanceof DreamRabbitEntity rabbit)) {
+                continue;
+            }
+            boolean near = level.getNearestPlayer(rabbit, RABBIT_DESPAWN_RADIUS) != null;
+            if (!near) {
+                stray.add(rabbit);
+            }
+        }
+        stray.forEach(Entity::discard);
     }
 
     /** Drops every dream rabbit of the level; the list is copied so removal cannot break iteration. */

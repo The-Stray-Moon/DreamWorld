@@ -2,7 +2,12 @@ package cc.sighs.dreamworld.entity;
 
 import cc.sighs.dreamworld.DWRegistry;
 import javax.annotation.Nullable;
+import cc.sighs.dreamworld.dream.DreamManager;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -54,7 +59,12 @@ public class DreamClayEntity extends Entity implements ItemSupplier {
     /** Distance below which the client is close enough to take the server position as is. */
     private static final double CLIENT_SNAP_SQR = 1.0E-6D;
 
+    private static final EntityDataAccessor<Boolean> DATA_DREAM_ORIGIN =
+            SynchedEntityData.defineId(DreamClayEntity.class, EntityDataSerializers.BOOLEAN);
+
     private int age;
+    /** True when the blob belongs to the dream layer and must stay invisible to awake players. */
+    private boolean dreamOrigin;
     /** Center the blob drifts around, kept in world space so it never flies away. */
     private Vec3 home = Vec3.ZERO;
     /** Velocity the blob steers towards; only meaningful on the server. */
@@ -76,7 +86,18 @@ public class DreamClayEntity extends Entity implements ItemSupplier {
      * @return the spawned entity, already added to the level
      */
     public static DreamClayEntity spawnNear(ServerLevel level, Vec3 center) {
+        return spawnNear(level, center, false);
+    }
+
+    /**
+     * Spawns a blob on the given layer.
+     *
+     * @param dreamOrigin true when the blob belongs to the dream layer
+     */
+    public static DreamClayEntity spawnNear(ServerLevel level, Vec3 center, boolean dreamOrigin) {
         DreamClayEntity clay = new DreamClayEntity(DWRegistry.DREAM_CLAY_ENTITY.get(), level);
+        clay.dreamOrigin = dreamOrigin;
+        clay.getEntityData().set(DATA_DREAM_ORIGIN, dreamOrigin);
         double x = center.x + (level.random.nextDouble() - 0.5D) * 1.6D;
         double y = center.y + 0.6D + level.random.nextDouble() * 0.6D;
         double z = center.z + (level.random.nextDouble() - 0.5D) * 1.6D;
@@ -97,6 +118,18 @@ public class DreamClayEntity extends Entity implements ItemSupplier {
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        builder.define(DATA_DREAM_ORIGIN, false);
+    }
+
+    /** True when the blob lives on the dream layer. */
+    public boolean isDreamOrigin() {
+        return this.getEntityData().get(DATA_DREAM_ORIGIN);
+    }
+
+    /** A dream blob is only sent to dreaming players, an awake blob only to awake players. */
+    @Override
+    public boolean broadcastToPlayer(ServerPlayer player) {
+        return isDreamOrigin() == DreamManager.isDreaming(player);
     }
 
     @Override
@@ -222,6 +255,8 @@ public class DreamClayEntity extends Entity implements ItemSupplier {
     @Override
     protected void readAdditionalSaveData(CompoundTag tag) {
         this.age = tag.getInt("Age");
+        this.getEntityData().set(DATA_DREAM_ORIGIN, tag.getBoolean("DreamOrigin"));
+        this.dreamOrigin = tag.getBoolean("DreamOrigin");
         if (tag.contains("HomeX")) {
             this.home = new Vec3(tag.getDouble("HomeX"), tag.getDouble("HomeY"), tag.getDouble("HomeZ"));
         } else {
@@ -240,5 +275,6 @@ public class DreamClayEntity extends Entity implements ItemSupplier {
         tag.putDouble("HomeX", this.home.x);
         tag.putDouble("HomeY", this.home.y);
         tag.putDouble("HomeZ", this.home.z);
+        tag.putBoolean("DreamOrigin", isDreamOrigin());
     }
 }

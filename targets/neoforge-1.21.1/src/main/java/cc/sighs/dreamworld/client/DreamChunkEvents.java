@@ -34,6 +34,15 @@ public final class DreamChunkEvents {
             lastDreaming = dreaming;
             Minecraft minecraft = Minecraft.getInstance();
             if (minecraft.level != null) {
+                // Drop the blobs that belong to the layer the player just left.
+                java.util.List<net.minecraft.world.entity.Entity> stale = new java.util.ArrayList<>();
+                for (net.minecraft.world.entity.Entity entity : minecraft.level.entitiesForRendering()) {
+                    if (entity instanceof cc.sighs.dreamworld.entity.DreamClayEntity clay
+                            && clay.isDreamOrigin() != dreaming) {
+                        stale.add(clay);
+                    }
+                }
+                stale.forEach(net.minecraft.world.entity.Entity::discard);
                 minecraft.levelRenderer.allChanged();
             }
         }

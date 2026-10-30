@@ -1,95 +1,133 @@
 package cc.sighs.dreamworld.client;
 
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.Vec3;
 
 /**
- * Per-block dream tint.
+ * Per-block dream colour pipeline.
  *
- * <p>While the local player dreams, every block face is recoloured by blending its base colour
- * towards a bright pink with a per-block-type random weight, instead of multiplying by a fixed
- * dark factor: light textures stay bright, and each block type lands on its own pink shade. The
- * weight is deterministic per block state, so a given block always looks the same.</p>
+ * <p>For every block face the original colour is first hue-rotated to pink and brightened, then
+ * multiplied by a per-block-type weighted pink blend. The result is written into the quad's vertex
+ * colour during chunk mesh building.</p>
  */
 public final class DreamBlockTint {
-    /** Bright pink the block colour is blended towards: rgb(255, 115, 204). */
-    private static final float PINK_RED = 1.0F;
-    private static final float PINK_GREEN = 0.45F;
-    private static final float PINK_BLUE = 0.80F;
+    /** Pink hue in [0, 1): 330 degrees. */
+    private static final float PINK_HUE = 330.0F / 360.0F;
+    /** Minimum saturation after the hue rotation. */
+    private static final float PINK_SATURATION = 0.62F;
+    /** Brightness boost applied after the rotation. */
+    private static final float BRIGHTNESS_BOOST = 1.28F;
 
-    /** Blend weight range: how far a block is pulled towards the pink. */
-    private static final float MIN_WEIGHT = 0.55F;
-    private static final float MAX_WEIGHT = 1.0F;
-    /** Extra per-block spread on green/blue so neighbouring block types stay distinguishable. */
-    private static final float HUE_SPREAD = 0.08F;
+    /** Second stage: the colour the rotated result is multiplied by. */
+    private static final float BLEND_RED = 1.0F;
+    private static final float BLEND_GREEN = 0.62F;
+    private static final float BLEND_BLUE = 0.88F;
+    private static final float MIN_WEIGHT = 0.30F;
+    private static final float MAX_WEIGHT = 0.65F;
+    private static final float HUE_SPREAD = 0.06F;
 
     private static final ThreadLocal<Integer> DEPTH = ThreadLocal.withInitial(() -> 0);
-    private static final ThreadLocal<float[]> PINK =
+    private static final ThreadLocal<float[]> BLEND =
             ThreadLocal.withInitial(() -> new float[]{1.0F, 1.0F, 1.0F});
 
     private DreamBlockTint() {
     }
 
-    /** Called by the block render dispatcher around a chunk batch. */
     public static void begin(BlockState state) {
         DEPTH.set(DEPTH.get() + 1);
-        PINK.set(mix(state));
+        BLEND.set(blend(state));
     }
 
     public static void end() {
         DEPTH.set(DEPTH.get() - 1);
     }
 
-    /** True only while a chunk block batch is being built and the player is dreaming. */
     public static boolean active() {
         return DEPTH.get() > 0 && DreamClientState.isDreaming();
     }
 
-    public static float red() {
-        return PINK.get()[0];
-    }
-
-    public static float green() {
-        return PINK.get()[1];
-    }
-
-    public static float blue() {
-        return PINK.get()[2];
-    }
-
     /**
-     * Weighted blend between the untouched colour (1, 1, 1) and the bright pink. The weight and the
-     * hue jitter come from the block state hash, so the result is stable per block type.
+     * Runs the pipeline for one quad colour: hue-rotate to pink, brighten, then multiply by the
+     * per-block blend. Returns the three factors written into the vertex colour.
      */
-    public static float[] mix(BlockState state) {
+    public static float[] transform(float red, float green, float blue) {
+        float[] hsv = toHsv(red, green, blue);
+        hsv[0] = PINK_HUE;
+        hsv[1] = Math.max(hsv[1], PINK_SATURATION);
+        hsv[2] = clamp(hsv[2] * BRIGHTNESS_BOOST);
+        float[] rotated = toRgb(hsv);
+        float[] blend = BLEND.get();
+        return new float[]{
+                clamp(rotated[0] * blend[0]),
+                clamp(rotated[1] * blend[1]),
+                clamp(rotated[2] * blend[2])
+        };
+    }
+
+    private static float[] blend(BlockState state) {
         if (state == null) {
-            return new float[]{PINK_RED, PINK_GREEN, PINK_BLUE};
+            return new float[]{BLEND_RED, BLEND_GREEN, BLEND_BLUE};
         }
         int hash = state.getBlock().hashCode() * 31 + state.hashCode();
         float weightNoise = ((hash >>> 8) & 0xFF) / 255.0F;
         float hueNoise = (hash & 0xFF) / 255.0F;
         float weight = MIN_WEIGHT + weightNoise * (MAX_WEIGHT - MIN_WEIGHT);
-        float green = PINK_GREEN + (hueNoise - 0.5F) * HUE_SPREAD;
-        float blue = PINK_BLUE + (weightNoise - 0.5F) * HUE_SPREAD;
-
+        float green = BLEND_GREEN + (hueNoise - 0.5F) * HUE_SPREAD;
+        float blue = BLEND_BLUE + (weightNoise - 0.5F) * HUE_SPREAD;
         return new float[]{
-                blend(1.0F, PINK_RED, weight),
-                blend(1.0F, clamp(green), weight),
-                blend(1.0F, clamp(blue), weight)
+                lerp(1.0F, BLEND_RED, weight),
+                lerp(1.0F, clamp(green), weight),
+                lerp(1.0F, clamp(blue), weight)
         };
     }
 
-    private static float blend(float base, float target, float weight) {
-        return base + (target - base) * weight;
+    private static float[] toHsv(float red, float green, float blue) {
+        float max = Math.max(red, Math.max(green, blue));
+        float min = Math.min(red, Math.min(green, blue));
+        float delta = max - min;
+        float hue;
+        if (delta < 1.0E-6F) {
+            hue = 0.0F;
+        } else if (max == red) {
+            hue = ((green - blue) / delta) / 6.0F;
+        } else if (max == green) {
+            hue = (2.0F + (blue - red) / delta) / 6.0F;
+        } else {
+            hue = (4.0F + (red - green) / delta) / 6.0F;
+        }
+        if (hue < 0.0F) {
+            hue += 1.0F;
+        }
+        float saturation = max < 1.0E-6F ? 0.0F : delta / max;
+        return new float[]{hue, saturation, max};
+    }
+
+    private static float[] toRgb(float[] hsv) {
+        float hue = hsv[0];
+        float saturation = hsv[1];
+        float value = hsv[2];
+        float chroma = value * saturation;
+        float section = hue * 6.0F;
+        float x = chroma * (1.0F - Math.abs(section % 2.0F - 1.0F));
+        float r;
+        float g;
+        float b;
+        switch ((int) Math.floor(section) % 6) {
+            case 0 -> { r = chroma; g = x; b = 0.0F; }
+            case 1 -> { r = x; g = chroma; b = 0.0F; }
+            case 2 -> { r = 0.0F; g = chroma; b = x; }
+            case 3 -> { r = 0.0F; g = x; b = chroma; }
+            case 4 -> { r = x; g = 0.0F; b = chroma; }
+            default -> { r = chroma; g = 0.0F; b = x; }
+        }
+        float m = value - chroma;
+        return new float[]{r + m, g + m, b + m};
+    }
+
+    private static float lerp(float from, float to, float t) {
+        return from + (to - from) * t;
     }
 
     private static float clamp(float value) {
         return Math.max(0.0F, Math.min(1.0F, value));
-    }
-
-    /** Same colour as a vector, for callers that prefer it. */
-    public static Vec3 mixVector(BlockState state) {
-        float[] pink = mix(state);
-        return new Vec3(pink[0], pink[1], pink[2]);
     }
 }

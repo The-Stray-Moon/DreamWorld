@@ -49,6 +49,9 @@ public final class DreamToolEvents {
         DreamIntrusion.breakBlock(player, level, pos);
         event.setCanceled(true);
         if (!DreamManager.isDreaming(player)) {
+            // Keep the pre-break state for the dream layer explicitly: the block is moved there.
+            cc.sighs.dreamworld.dream.DreamPatches.get(level).recordRealEdit(level, pos,
+                    level.getBlockState(pos));
             level.removeBlock(pos, false);
         }
     }

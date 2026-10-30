@@ -75,6 +75,10 @@ public final class DreamManager {
         setDreaming(player, false);
         restoreDreamBody(player);
         DreamEntities.refreshVisibility(player);
+        if (player.level() instanceof ServerLevel level) {
+            // Nobody may be left in the dream layer: its rabbits go with the last dreamer.
+            DreamMobs.discardIfNoDreamers(level);
+        }
         Destination destination = anchorDestination(player);
         if (destination != null) {
             teleport(player, destination.level(), destination.pos());

@@ -6,7 +6,8 @@
     "ClientLevelMixin",
     "ClientLevelPatchMixin",
     "ModelBlockRendererMixin",
-    "BlockRenderDispatcherMixin"
+    "BlockRenderDispatcherMixin",
+    "MultiPlayerGameModeMixin"
   ],
   "injectors": {
     "defaultRequire": 1

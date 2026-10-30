@@ -2,10 +2,11 @@ package cc.sighs.dreamworld.dream;
 
 import cc.sighs.dreamworld.DWRegistry;
 import cc.sighs.dreamworld.DreamWorldNeoForge121;
+import cc.sighs.dreamworld.client.DreamClientState;
+import cc.sighs.dreamworld.entity.DreamClayEntity;
 import cc.sighs.dreamworld.entity.DreamSpearEntity;
 import cc.sighs.dreamworld.item.DreamGraffitiItem;
 import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.Boat;
@@ -13,46 +14,53 @@ import net.minecraft.world.item.BoatItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
-import net.neoforged.neoforge.event.level.BlockEvent;
 
 /**
- * World rules of the dream world.
+ * World rules of the dream layer, enforced on the client only.
  *
- * <p>The dream world shares its block data with the real world, so a dreamer must not edit it with
- * bare hands. Breaking, placing and interacting are cancelled for dreaming players, except for
- * dream graffiti (the only block that can be built with inside a dream) and anything done while
- * holding a piece of dream alloy equipment, which is exactly what dream intrusions are made
- * with.</p>
- *
- * <p>Boats are the vehicle of the dream layer: a dreamer may place one and use it, so boat items
- * and boat entities are let through. No other item gains that allowance.</p>
+ * <p>A dreamer's own client refuses to break, place or interact with anything except dream
+ * graffiti, dream alloy gear, boats, dream clay and the player's own spear. Nothing is checked on
+ * the server; the layer is a client-side view, so the client is the authority for these rules.</p>
  */
-@EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID)
+@EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID, value = Dist.CLIENT)
 public final class DreamWorldRules {
     private DreamWorldRules() {
     }
 
-    @SubscribeEvent
-    public static void onBlockBreak(BlockEvent.BreakEvent event) {
-        if (!(event.getPlayer() instanceof ServerPlayer player) || !DreamManager.isDreaming(player)) {
-            return;
-        }
-        if (isGraffiti(event.getLevel().getBlockState(event.getPos())) || holdsDreamAlloy(player)) {
-            return;
-        }
-        event.setCanceled(true);
+    /** True for the local dreaming player. */
+    public static boolean isDreaming(Player player) {
+        return player != null && player.level().isClientSide() && player.isLocalPlayer()
+                && DreamClientState.isDreaming();
+    }
+
+    /** Blocks may only be broken with dream alloy gear or when they are graffiti. */
+    public static boolean mayBreak(Player player, BlockState state) {
+        return isGraffiti(state) || holdsDreamAlloy(player);
+    }
+
+    public static boolean mayInteractBlock(Player player, BlockState state) {
+        return isGraffiti(state) || holdsDreamAlloy(player) || holdsGraffiti(player) || holdsBoat(player);
+    }
+
+    public static boolean mayUseItem(Player player) {
+        return holdsDreamAlloy(player) || holdsGraffiti(player) || holdsBoat(player);
+    }
+
+    public static boolean mayInteractEntity(Player player, Entity target) {
+        return holdsDreamAlloy(player) || target instanceof DreamSpearEntity
+                || target instanceof DreamClayEntity || target instanceof Boat;
     }
 
     @SubscribeEvent
     public static void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
-        if (!(event.getEntity() instanceof ServerPlayer player) || !DreamManager.isDreaming(player)) {
+        if (!isDreaming(event.getEntity())) {
             return;
         }
-        BlockState clicked = event.getLevel().getBlockState(event.getPos());
-        if (isGraffiti(clicked) || holdsDreamAlloy(player)) {
+        if (mayBreak(event.getEntity(), event.getLevel().getBlockState(event.getPos()))) {
             return;
         }
         event.setCanceled(true);
@@ -60,14 +68,11 @@ public final class DreamWorldRules {
 
     @SubscribeEvent
     public static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
-        if (!(event.getEntity() instanceof ServerPlayer player) || !DreamManager.isDreaming(player)) {
+        if (!isDreaming(event.getEntity())) {
             return;
         }
         BlockPos pos = event.getPos();
-        if (isGraffiti(event.getLevel().getBlockState(pos))
-                || holdsDreamAlloy(player)
-                || holdsGraffiti(player)
-                || holdsBoat(player)) {
+        if (mayInteractBlock(event.getEntity(), event.getLevel().getBlockState(pos))) {
             return;
         }
         event.setCanceled(true);
@@ -75,10 +80,10 @@ public final class DreamWorldRules {
 
     @SubscribeEvent
     public static void onRightClickItem(PlayerInteractEvent.RightClickItem event) {
-        if (!(event.getEntity() instanceof ServerPlayer player) || !DreamManager.isDreaming(player)) {
+        if (!isDreaming(event.getEntity())) {
             return;
         }
-        if (holdsDreamAlloy(player) || holdsGraffiti(player) || holdsBoat(player)) {
+        if (mayUseItem(event.getEntity())) {
             return;
         }
         event.setCanceled(true);
@@ -86,14 +91,10 @@ public final class DreamWorldRules {
 
     @SubscribeEvent
     public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
-        if (!(event.getEntity() instanceof ServerPlayer player) || !DreamManager.isDreaming(player)) {
+        if (!isDreaming(event.getEntity())) {
             return;
         }
-        // The spear is the anchor itself: a dreamer has to be able to pick their own spear back up.
-        // A boat is the other way to travel the dream layer, so boarding and using one is allowed;
-        // a chest boat keeps its container that way too.
-        if (holdsDreamAlloy(player) || event.getTarget() instanceof DreamSpearEntity
-                || isBoat(event.getTarget())) {
+        if (mayInteractEntity(event.getEntity(), event.getTarget())) {
             return;
         }
         event.setCanceled(true);
@@ -103,18 +104,10 @@ public final class DreamWorldRules {
         return state.is(DWRegistry.DREAM_GRAFFITI.get());
     }
 
-    /**
-     * Any boat item, chest variants included: they are all {@link BoatItem}s, while no other item
-     * is, so the dream layer only gains the boat.
-     */
+    /** Any boat item, chest variants included. */
     private static boolean holdsBoat(Player player) {
         return player.getMainHandItem().getItem() instanceof BoatItem
                 || player.getOffhandItem().getItem() instanceof BoatItem;
-    }
-
-    /** 1.21.1 has no {@code AbstractBoat}; {@code ChestBoat} is a {@link Boat} subclass already. */
-    private static boolean isBoat(Entity entity) {
-        return entity instanceof Boat;
     }
 
     private static boolean holdsDreamAlloy(Player player) {

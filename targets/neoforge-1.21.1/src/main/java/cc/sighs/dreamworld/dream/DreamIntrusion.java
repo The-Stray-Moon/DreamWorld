@@ -53,9 +53,8 @@ public final class DreamIntrusion {
         }
         DreamPatches.get(level).setDreamState(level, pos, Blocks.AIR.defaultBlockState());
         BlockPos target = DreamManager.intrusionTarget(actor, pos);
-        if (target.equals(pos) || level.getBlockState(target).equals(carried)) {
-            // Without an anchor the block never left the real world, and an identical state needs
-            // no write either way.
+        if (level.getBlockState(target).equals(carried)) {
+            // Nothing to move: the destination already holds the carried block.
             return;
         }
         // The recorder hooks LevelChunk#setBlockState, so the state the target loses is kept for

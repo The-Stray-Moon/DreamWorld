@@ -53,7 +53,7 @@ public class DreamRabbitEntity extends Rabbit {
         }
         if (--this.clayDelay <= 0) {
             if (level() instanceof ServerLevel server) {
-                DreamClayEntity.spawnNear(server, position().add(0.0D, 0.4D, 0.0D));
+                DreamClayEntity.spawnNear(server, position().add(0.0D, 0.4D, 0.0D), true);
             }
             this.clayDelay = nextClayDelay();
         }
