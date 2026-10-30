@@ -4,6 +4,7 @@ import cc.sighs.dreamworld.DWRegistry;
 import cc.sighs.dreamworld.DreamWorldNeoForge121;
 import cc.sighs.dreamworld.block.DreamGraffitiBlock;
 import cc.sighs.dreamworld.dream.DreamIntrusion;
+import cc.sighs.dreamworld.dream.DreamManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -20,9 +21,9 @@ import net.neoforged.neoforge.event.level.BlockEvent;
  * Dream intrusion hooks for the dream alloy tool set.
  *
  * <p>Dream alloy gear never really destroys anything on the layer it is used in: a broken block is
- * carried over to the other layer, a creature whose last hit comes from the sword is moved there
- * alive and asleep. Both keep their normal, event-less transfer semantics: no loot, no experience,
- * no chained intrusion.</p>
+ * carried over to the other layer, a creature whose last hit comes from the sword is put to sleep
+ * where it stands instead of dying. Both keep their normal, event-less transfer semantics: no loot,
+ * no experience, no chained intrusion.</p>
  */
 @EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID)
 public final class DreamToolEvents {
@@ -42,18 +43,21 @@ public final class DreamToolEvents {
         if (event.getLevel().getBlockState(pos).getBlock() instanceof DreamGraffitiBlock) {
             return;
         }
-        // While dreaming the break only exists in the dream patch; in the real world the block is
-        // removed without loot and the recorder keeps its old state for the dream layer.
+        // While dreaming the break only exists in the dream patch and the block is carried into the
+        // real world at the intrusion target; in the real world the block is removed without loot
+        // and the recorder keeps its old state for the dream layer.
         DreamIntrusion.breakBlock(player, level, pos);
         event.setCanceled(true);
-        if (!cc.sighs.dreamworld.dream.DreamManager.isDreaming(player)) {
+        if (!DreamManager.isDreaming(player)) {
             level.removeBlock(pos, false);
         }
     }
 
     /**
-     * A lethal hit from the dream alloy sword does not kill: the creature is moved to the other
-     * layer, asleep and inert. Cancelling the damage keeps it out of death events, loot and XP.
+     * A lethal hit from the dream alloy sword does not kill on either side of the mirror: the
+     * creature is put to sleep where it stands, alive and inert. Cancelling the damage keeps it out
+     * of death events, loot and XP. This hook serves the dreaming and the real-world hit alike, so
+     * there is no second path that could process the same creature twice.
      */
     @SubscribeEvent
     public static void onIncomingDamage(LivingIncomingDamageEvent event) {
@@ -85,7 +89,7 @@ public final class DreamToolEvents {
                 continue;
             }
             DreamIntrusion.breakBlock(player, level, pos);
-            if (!cc.sighs.dreamworld.dream.DreamManager.isDreaming(player)) {
+            if (!DreamManager.isDreaming(player)) {
                 level.removeBlock(pos, false);
             }
         }

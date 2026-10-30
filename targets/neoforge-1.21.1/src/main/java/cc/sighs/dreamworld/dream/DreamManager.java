@@ -49,6 +49,9 @@ public final class DreamManager {
         tag(player).putBoolean(DREAMING, dreaming);
         player.setForcedPose(dreaming ? Pose.SLEEPING : null);
         PacketDistributor.sendToPlayer(player, new DWPayloads.DreamStatePayload(dreaming));
+        // Dream rabbits are filtered out of the tracking set of non-dreaming players, so the set
+        // has to be re-evaluated here to send or remove them right away.
+        DreamMobs.refreshTracking(player);
     }
 
     /** Starts the dream in place: no teleport, the client switches to the patched dream layer. */
@@ -58,7 +61,6 @@ public final class DreamManager {
         }
         refreshAnchor(player);
         setDreaming(player, true);
-        grantDreamMovement(player);
         DreamPatchSync.sendAround(player);
     }
 
@@ -68,7 +70,6 @@ public final class DreamManager {
             return;
         }
         setDreaming(player, false);
-        restoreDreamMovement(player);
         Destination destination = anchorDestination(player);
         if (destination != null) {
             teleport(player, destination.level(), destination.pos());
@@ -113,67 +114,12 @@ public final class DreamManager {
 
     // ---------------------------------------------------------- dream movement
 
-    /**
-     * The dream body is unbounded: it ignores collisions and floats. Because the server keeps the
-     * player in place, other players see the body lying there while it drifts through walls.
-     */
-    public static void grantDreamMovement(ServerPlayer player) {
-        CompoundTag tag = tag(player);
-        if (!tag.contains("PrevMayfly")) {
-            tag.putBoolean("PrevMayfly", player.getAbilities().mayfly);
-            tag.putBoolean("PrevFlying", player.getAbilities().flying);
-            tag.putBoolean("PrevNoPhysics", player.noPhysics);
-        }
-        applyDreamMovement(player);
-    }
-
-    /**
-     * Applies the free-floating dream body, except while the player is riding: a vehicle owns the
-     * movement then, and forcing flight/no-collision on the rider swallows the control input the
-     * boat needs. The pose is cleared for the same reason.
-     */
-    public static void refreshDreamMovement(ServerPlayer player) {
+    /** A dreamer lies down on the shared side; a rider keeps the vehicle pose instead. */
+    public static void applyDreamPose(ServerPlayer player) {
         if (!isDreaming(player)) {
             return;
         }
-        applyDreamMovement(player);
-    }
-
-    private static void applyDreamMovement(ServerPlayer player) {
-        boolean riding = player.isPassenger();
-        CompoundTag tag = tag(player);
-        boolean changed = !tag.contains("MoveRiding") || tag.getBoolean("MoveRiding") != riding;
-        tag.putBoolean("MoveRiding", riding);
-        player.noPhysics = !riding;
-        player.getAbilities().mayfly = true;
-        player.getAbilities().flying = !riding;
-        player.onUpdateAbilities();
-        if (changed) {
-            player.setForcedPose(riding ? null : Pose.SLEEPING);
-        }
-    }
-
-    /** Keeps the body/vehicle ownership in sync when something mounts or dismounts off-event. */
-    public static void reconcileDreamMovement(ServerPlayer player) {
-        if (isDreaming(player)) {
-            applyDreamMovement(player);
-        }
-    }
-
-    /** Restores the abilities the player had before the dream. */
-    public static void restoreDreamMovement(ServerPlayer player) {
-        CompoundTag tag = tag(player);
-        if (!tag.contains("PrevMayfly")) {
-            player.noPhysics = false;
-            return;
-        }
-        player.noPhysics = tag.getBoolean("PrevNoPhysics");
-        player.getAbilities().mayfly = tag.getBoolean("PrevMayfly");
-        player.getAbilities().flying = tag.getBoolean("PrevFlying");
-        player.onUpdateAbilities();
-        tag.remove("PrevMayfly");
-        tag.remove("PrevFlying");
-        tag.remove("PrevNoPhysics");
+        player.setForcedPose(player.isPassenger() ? null : Pose.SLEEPING);
     }
 
     /**

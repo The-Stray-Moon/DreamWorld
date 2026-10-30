@@ -6,7 +6,10 @@ import cc.sighs.dreamworld.entity.DreamSpearEntity;
 import cc.sighs.dreamworld.item.DreamGraffitiItem;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraft.world.item.BoatItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
@@ -23,6 +26,9 @@ import net.neoforged.neoforge.event.level.BlockEvent;
  * dream graffiti (the only block that can be built with inside a dream) and anything done while
  * holding a piece of dream alloy equipment, which is exactly what dream intrusions are made
  * with.</p>
+ *
+ * <p>Boats are the vehicle of the dream layer: a dreamer may place one and use it, so boat items
+ * and boat entities are let through. No other item gains that allowance.</p>
  */
 @EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID)
 public final class DreamWorldRules {
@@ -60,7 +66,8 @@ public final class DreamWorldRules {
         BlockPos pos = event.getPos();
         if (isGraffiti(event.getLevel().getBlockState(pos))
                 || holdsDreamAlloy(player)
-                || holdsGraffiti(player)) {
+                || holdsGraffiti(player)
+                || holdsBoat(player)) {
             return;
         }
         event.setCanceled(true);
@@ -71,7 +78,7 @@ public final class DreamWorldRules {
         if (!(event.getEntity() instanceof ServerPlayer player) || !DreamManager.isDreaming(player)) {
             return;
         }
-        if (holdsDreamAlloy(player) || holdsGraffiti(player)) {
+        if (holdsDreamAlloy(player) || holdsGraffiti(player) || holdsBoat(player)) {
             return;
         }
         event.setCanceled(true);
@@ -83,7 +90,10 @@ public final class DreamWorldRules {
             return;
         }
         // The spear is the anchor itself: a dreamer has to be able to pick their own spear back up.
-        if (holdsDreamAlloy(player) || event.getTarget() instanceof DreamSpearEntity) {
+        // A boat is the other way to travel the dream layer, so boarding and using one is allowed;
+        // a chest boat keeps its container that way too.
+        if (holdsDreamAlloy(player) || event.getTarget() instanceof DreamSpearEntity
+                || isBoat(event.getTarget())) {
             return;
         }
         event.setCanceled(true);
@@ -91,6 +101,20 @@ public final class DreamWorldRules {
 
     private static boolean isGraffiti(BlockState state) {
         return state.is(DWRegistry.DREAM_GRAFFITI.get());
+    }
+
+    /**
+     * Any boat item, chest variants included: they are all {@link BoatItem}s, while no other item
+     * is, so the dream layer only gains the boat.
+     */
+    private static boolean holdsBoat(Player player) {
+        return player.getMainHandItem().getItem() instanceof BoatItem
+                || player.getOffhandItem().getItem() instanceof BoatItem;
+    }
+
+    /** 1.21.1 has no {@code AbstractBoat}; {@code ChestBoat} is a {@link Boat} subclass already. */
+    private static boolean isBoat(Entity entity) {
+        return entity instanceof Boat;
     }
 
     private static boolean holdsDreamAlloy(Player player) {

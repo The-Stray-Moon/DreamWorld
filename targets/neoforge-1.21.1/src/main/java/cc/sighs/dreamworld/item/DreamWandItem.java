@@ -1,9 +1,14 @@
 package cc.sighs.dreamworld.item;
 
+import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
@@ -19,12 +24,13 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Dream alloy wand: charged aimed explosion at the crosshair.
+ * Dream alloy wand: charged aimed blast at the crosshair.
  *
  * <p>The item is charged by holding the use button; releasing it raycasts along the player's look
- * vector and detonates an explosion at the first block hit (or at the end of the ray). The longer
- * the charge, the bigger the radius (1 to 4). Explosions are attributed to the player and the
- * destroyed blocks trigger a dream intrusion while the player is dreaming.</p>
+ * vector and blasts the first block hit (or the end of the ray). The longer the charge, the bigger
+ * the radius (1 to 4). The blast never damages anything living: it only plays the vanilla explosion
+ * sound and particles, and the blocks inside the radius are handed over to the dream intrusion
+ * instead of being destroyed by an explosion, so no loot and no experience are spawned.</p>
  */
 public class DreamWandItem extends Item {
     /** Ticks of charging needed for the maximum radius. */
@@ -78,13 +84,11 @@ public class DreamWandItem extends Item {
                 new ClipContext(from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
         Vec3 target = hit.getLocation();
 
-        // Damage only: blocks are never blown up for real, they are transferred by the intrusion
-        // path below without loot or experience.
-        level.explode(player, target.x, target.y, target.z, radius, Level.ExplosionInteraction.NONE);
+        playBlastEffects(serverLevel, target, radius);
 
         int reach = Mth.ceil(radius);
         BlockPos center = BlockPos.containing(target);
-        List<BlockPos> caught = new java.util.ArrayList<>();
+        List<BlockPos> caught = new ArrayList<>();
         for (BlockPos pos : BlockPos.betweenClosed(center.offset(-reach, -reach, -reach),
                 center.offset(reach, reach, reach))) {
             if (pos.distSqr(center) <= (double) radius * radius) {
@@ -95,5 +99,16 @@ public class DreamWandItem extends Item {
 
         stack.hurtAndBreak(1, player, EquipmentSlot.MAINHAND);
         player.getCooldowns().addCooldown(this, COOLDOWN_TICKS);
+    }
+
+    /**
+     * Plays the sound and the particles of a vanilla blast without creating an explosion: no entity
+     * is ever hurt and no block is destroyed by the effect itself.
+     */
+    private static void playBlastEffects(ServerLevel level, Vec3 target, float radius) {
+        level.playSound(null, target.x, target.y, target.z, SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS,
+                4.0F, (1.0F + (level.random.nextFloat() - level.random.nextFloat()) * 0.2F) * 0.7F);
+        ParticleOptions particle = radius < 2.0F ? ParticleTypes.EXPLOSION : ParticleTypes.EXPLOSION_EMITTER;
+        level.sendParticles(particle, target.x, target.y, target.z, 1, 0.0D, 0.0D, 0.0D, 0.0D);
     }
 }

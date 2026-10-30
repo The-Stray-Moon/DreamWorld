@@ -2,7 +2,9 @@ package cc.sighs.dreamworld.entity;
 
 import cc.sighs.dreamworld.DWRegistry;
 import cc.sighs.dreamworld.DreamWorldNeoForge121;
+import cc.sighs.dreamworld.dream.DreamManager;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.EntityType;
@@ -17,7 +19,8 @@ import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
  * dream clay from time to time, the same way a chicken lays eggs.
  *
  * <p>It must only be created through its spawn egg or by the dream side code, there is no natural
- * spawn placement for it.</p>
+ * spawn placement for it. The rabbits are shared by all dreaming players of a level and are never
+ * sent to a client that is not dreaming.</p>
  */
 @EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID)
 public class DreamRabbitEntity extends Rabbit {
@@ -68,6 +71,17 @@ public class DreamRabbitEntity extends Rabbit {
     @Override
     public boolean isInvulnerableTo(DamageSource source) {
         return true;
+    }
+
+    /**
+     * Server-side tracking gate. The chunk map asks every entity whether it may be sent to a
+     * player, so a rabbit only ever reaches the clients of dreaming players. Returning false also
+     * takes the rabbit out of the tracking set of a player who just woke up, which is what sends
+     * them the removal packet.
+     */
+    @Override
+    public boolean broadcastToPlayer(ServerPlayer player) {
+        return DreamManager.isDreaming(player);
     }
 
     @Override

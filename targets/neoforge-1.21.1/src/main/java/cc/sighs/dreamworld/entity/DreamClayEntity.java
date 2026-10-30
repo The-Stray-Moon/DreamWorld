@@ -7,6 +7,7 @@ import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
@@ -22,20 +23,46 @@ import net.minecraft.world.phys.Vec3;
 /**
  * Dream clay: a floating blob spawned next to the bed when a player wakes up, or produced by a
  * dream rabbit. It drifts through the air, disappears after a while and can be collected.
+ *
+ * <p>The drift is simulated on the server only and is always smooth: the blob picks a slow random
+ * target velocity every few ticks and steers towards it with a capped acceleration instead of
+ * being kicked around every tick. Clients never simulate the drift themselves, they ease towards
+ * the authoritative server position, so the view is smooth even though the network only delivers
+ * one position per tick.</p>
  */
 public class DreamClayEntity extends Entity implements ItemSupplier {
     /** Ticks before the blob dissolves. */
     public static final int LIFETIME = 20 * 120;
     /** Ticks the blob cannot be collected after spawning. */
     public static final int PICKUP_DELAY = 10;
-    /** Maximum length of the drift velocity, in blocks per tick. */
-    private static final double MAX_SPEED = 0.08D;
-    /** Distance from the spawn point at which the blob starts drifting back. */
+    /** Hard cap for the drift velocity, in blocks per tick. */
+    private static final double MAX_SPEED = 0.06D;
+    /** Length of a randomly picked drift velocity, in blocks per tick. */
+    private static final double DRIFT_SPEED = 0.022D;
+    /** Ticks between two drift direction changes. */
+    private static final int RETARGET_INTERVAL = 30;
+    /** Largest velocity change of one tick, in blocks per tick. */
+    private static final double MAX_ACCELERATION = 0.0035D;
+    /** Distance from the center at which the blob starts drifting back. */
     private static final double HOME_RADIUS = 1.5D;
+    /** Spring strength of the pull back to the center, in blocks per tick per block of excess distance. */
+    private static final double HOME_PULL = 0.05D;
+    /** Fraction of the remaining distance a client closes per tick while easing to the server. */
+    private static final double CLIENT_LERP = 0.5D;
+    /** Distance in blocks above which the client snaps instead of easing (server teleport). */
+    private static final double CLIENT_SNAP_DISTANCE = 8.0D;
+    /** Distance below which the client is close enough to take the server position as is. */
+    private static final double CLIENT_SNAP_SQR = 1.0E-6D;
 
     private int age;
     /** Center the blob drifts around, kept in world space so it never flies away. */
     private Vec3 home = Vec3.ZERO;
+    /** Velocity the blob steers towards; only meaningful on the server. */
+    private Vec3 drift = Vec3.ZERO;
+    private int retargetTimer;
+    /** Position the server put the blob at, eased towards on the client. */
+    @Nullable
+    private Vec3 lerpTarget;
 
     public DreamClayEntity(EntityType<? extends DreamClayEntity> type, Level level) {
         super(type, level);
@@ -55,10 +82,17 @@ public class DreamClayEntity extends Entity implements ItemSupplier {
         double z = center.z + (level.random.nextDouble() - 0.5D) * 1.6D;
         clay.setPos(x, y, z);
         clay.home = new Vec3(center.x, y, center.z);
-        clay.setDeltaMovement((level.random.nextDouble() - 0.5D) * 0.02D, 0.0D,
-                (level.random.nextDouble() - 0.5D) * 0.02D);
+        clay.drift = pickDrift(level.random);
+        clay.setDeltaMovement(clay.drift);
         level.addFreshEntity(clay);
         return clay;
+    }
+
+    /** Picks a random drift velocity the blob steers towards from now on. */
+    private static Vec3 pickDrift(RandomSource random) {
+        double angle = random.nextDouble() * Math.PI * 2.0D;
+        double vertical = (random.nextDouble() - 0.5D) * 0.6D;
+        return new Vec3(Math.cos(angle) * DRIFT_SPEED, vertical * DRIFT_SPEED, Math.sin(angle) * DRIFT_SPEED);
     }
 
     @Override
@@ -68,27 +102,68 @@ public class DreamClayEntity extends Entity implements ItemSupplier {
     @Override
     public void tick() {
         super.tick();
-        // The drift is simulated on the server only, the client interpolates the synced position.
-        if (level().isClientSide) {
+        if (this.level().isClientSide) {
+            this.easeToServerPosition();
             return;
         }
         if (++this.age >= LIFETIME) {
             discard();
             return;
         }
-        Vec3 motion = getDeltaMovement()
-                .add((random.nextDouble() - 0.5D) * 0.02D, (random.nextDouble() - 0.5D) * 0.02D,
-                        (random.nextDouble() - 0.5D) * 0.02D)
-                .scale(0.92D);
-        Vec3 toHome = this.home.subtract(position());
-        if (toHome.lengthSqr() > HOME_RADIUS * HOME_RADIUS) {
-            motion = motion.add(toHome.normalize().scale(0.012D));
+        if (++this.retargetTimer >= RETARGET_INTERVAL) {
+            this.retargetTimer = 0;
+            this.drift = pickDrift(this.random);
         }
-        if (motion.lengthSqr() > MAX_SPEED * MAX_SPEED) {
-            motion = motion.normalize().scale(MAX_SPEED);
+        Vec3 desired = this.drift;
+        Vec3 toHome = this.home.subtract(position());
+        double distance = toHome.length();
+        if (distance > HOME_RADIUS) {
+            double pull = Math.min(1.0D, (distance - HOME_RADIUS) / HOME_RADIUS) * HOME_PULL;
+            desired = desired.add(toHome.scale(pull / distance));
+        }
+        if (desired.lengthSqr() > MAX_SPEED * MAX_SPEED) {
+            desired = desired.normalize().scale(MAX_SPEED);
+        }
+        // Steer towards the wanted velocity instead of snapping to it: the acceleration of a single
+        // tick is capped, which keeps the curve smooth both on the server and on the clients.
+        Vec3 motion = getDeltaMovement();
+        Vec3 correction = desired.subtract(motion);
+        double correctionLength = correction.length();
+        if (correctionLength > 1.0E-5D) {
+            motion = motion.add(correction.scale(Math.min(correctionLength, MAX_ACCELERATION) / correctionLength));
         }
         setDeltaMovement(motion);
         move(MoverType.SELF, motion);
+    }
+
+    /**
+     * Takes the position packet from the server as a target and closes a fixed share of the
+     * remaining distance every tick, instead of jumping to the position the packet carried.
+     */
+    @Override
+    public void lerpTo(double x, double y, double z, float yRot, float xRot, int steps) {
+        boolean farAway = this.position().distanceToSqr(x, y, z) > CLIENT_SNAP_DISTANCE * CLIENT_SNAP_DISTANCE;
+        if (!this.level().isClientSide || farAway) {
+            this.lerpTarget = null;
+            super.lerpTo(x, y, z, yRot, xRot, steps);
+            return;
+        }
+        this.lerpTarget = new Vec3(x, y, z);
+        this.setRot(yRot, xRot);
+    }
+
+    private void easeToServerPosition() {
+        Vec3 target = this.lerpTarget;
+        if (target == null) {
+            return;
+        }
+        Vec3 step = target.subtract(this.position()).scale(CLIENT_LERP);
+        if (step.lengthSqr() < CLIENT_SNAP_SQR) {
+            this.setPos(target.x, target.y, target.z);
+            this.lerpTarget = null;
+        } else {
+            this.setPos(this.getX() + step.x, this.getY() + step.y, this.getZ() + step.z);
+        }
     }
 
     @Override
@@ -151,6 +226,11 @@ public class DreamClayEntity extends Entity implements ItemSupplier {
             this.home = new Vec3(tag.getDouble("HomeX"), tag.getDouble("HomeY"), tag.getDouble("HomeZ"));
         } else {
             this.home = position();
+        }
+        // Continue the drift that was saved with the blob instead of stopping for a retarget.
+        this.drift = getDeltaMovement();
+        if (this.drift.lengthSqr() > MAX_SPEED * MAX_SPEED) {
+            this.drift = this.drift.normalize().scale(MAX_SPEED);
         }
     }
 

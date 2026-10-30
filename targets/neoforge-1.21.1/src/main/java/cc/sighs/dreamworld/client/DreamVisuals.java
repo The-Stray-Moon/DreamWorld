@@ -8,7 +8,6 @@ import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import com.mojang.blaze3d.vertex.VertexSorting;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -25,12 +24,13 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.ViewportEvent;
-import org.joml.Matrix4f;
-import org.joml.Matrix4fStack;
 
 /**
- * Client-side dream world visuals: blue permanent-day sky, dream fog, a pink full screen wash and
- * the graffiti tunnels.
+ * Client-side dream world visuals: pink dream fog and the graffiti tunnels.
+ *
+ * <p>The pink block tint is not applied here: it lives in
+ * {@code cc.sighs.dreamworld.mixin.client.LevelRendererMixin}, which tints the chunk layers only, so
+ * entities, particles and the HUD keep their normal colours.</p>
  */
 @EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID, value = Dist.CLIENT)
 public final class DreamVisuals {
@@ -44,11 +44,6 @@ public final class DreamVisuals {
     private static final float TUNNEL_GREEN = 0.8F;
     private static final float TUNNEL_BLUE = 1.0F;
     private static final float TUNNEL_ALPHA = 0.55F;
-    /** Pink wash applied over the whole screen, kept low so the world stays readable. */
-    private static final float TINT_RED = 1.0F;
-    private static final float TINT_GREEN = 0.35F;
-    private static final float TINT_BLUE = 0.62F;
-    private static final float TINT_ALPHA = 0.30F;
     private static final float FOG_RED = 0.78F;
     private static final float FOG_GREEN = 0.55F;
     private static final float FOG_BLUE = 0.72F;
@@ -70,8 +65,6 @@ public final class DreamVisuals {
         }
         if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
             renderTunnels(event.getCamera());
-        } else if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_LEVEL) {
-            renderDreamTint();
         }
     }
 
@@ -175,41 +168,6 @@ public final class DreamVisuals {
         RenderSystem.depthMask(true);
         RenderSystem.enableCull();
         RenderSystem.disableBlend();
-    }
-
-    /**
-     * Draws a translucent pink layer over the whole screen. The level has already been rendered into
-     * the main target at this stage, so every block is tinted without touching the HUD.
-     */
-    private static void renderDreamTint() {
-        RenderSystem.backupProjectionMatrix();
-        Matrix4fStack modelViewStack = RenderSystem.getModelViewStack();
-        modelViewStack.pushMatrix();
-        modelViewStack.identity();
-        RenderSystem.applyModelViewMatrix();
-        // Identity projection lets the quad be expressed directly in normalised device coordinates.
-        RenderSystem.setProjectionMatrix(new Matrix4f(), VertexSorting.ORTHOGRAPHIC_Z);
-        RenderSystem.setShader(GameRenderer::getPositionColorShader);
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.disableCull();
-        RenderSystem.depthMask(false);
-        RenderSystem.disableDepthTest();
-        Tesselator tesselator = Tesselator.getInstance();
-        BufferBuilder buffer = tesselator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
-        buffer.addVertex(-1.0F, -1.0F, 0.0F).setColor(TINT_RED, TINT_GREEN, TINT_BLUE, TINT_ALPHA);
-        buffer.addVertex(1.0F, -1.0F, 0.0F).setColor(TINT_RED, TINT_GREEN, TINT_BLUE, TINT_ALPHA);
-        buffer.addVertex(1.0F, 1.0F, 0.0F).setColor(TINT_RED, TINT_GREEN, TINT_BLUE, TINT_ALPHA);
-        buffer.addVertex(-1.0F, 1.0F, 0.0F).setColor(TINT_RED, TINT_GREEN, TINT_BLUE, TINT_ALPHA);
-        BufferUploader.drawWithShader(buffer.buildOrThrow());
-        RenderSystem.enableDepthTest();
-        RenderSystem.depthMask(true);
-        RenderSystem.enableCull();
-        RenderSystem.disableBlend();
-        modelViewStack.popMatrix();
-        RenderSystem.applyModelViewMatrix();
-        RenderSystem.restoreProjectionMatrix();
     }
 
     private static double distanceToSegmentSqr(Vec3 point, Vec3 start, Vec3 end) {

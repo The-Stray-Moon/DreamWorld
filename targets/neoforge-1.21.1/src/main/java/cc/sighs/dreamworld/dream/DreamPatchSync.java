@@ -73,13 +73,6 @@ public final class DreamPatchSync {
 
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
-        if (event.getServer().getTickCount() % 10 == 0) {
-            for (ServerLevel level : event.getServer().getAllLevels()) {
-                for (ServerPlayer player : level.players()) {
-                    DreamManager.reconcileDreamMovement(player);
-                }
-            }
-        }
         if (DIRTY.isEmpty()) {
             return;
         }

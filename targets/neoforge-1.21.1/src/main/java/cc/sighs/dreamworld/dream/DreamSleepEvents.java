@@ -3,9 +3,14 @@ package cc.sighs.dreamworld.dream;
 import cc.sighs.dreamworld.DWRegistry;
 import cc.sighs.dreamworld.DreamWorldNeoForge121;
 import cc.sighs.dreamworld.entity.DreamClayEntity;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -19,6 +24,7 @@ import net.neoforged.neoforge.event.entity.player.CanContinueSleepingEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerWakeUpEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 /**
  * Sleeping behaviour of the dream world.
@@ -28,11 +34,24 @@ import net.neoforged.neoforge.event.entity.player.PlayerWakeUpEvent;
  * respawn point is ever set, and the missing bed block is compensated through
  * {@link CanContinueSleepingEvent} so vanilla does not wake the sleeper up on the next tick.</p>
  *
- * <p>Sleeping with the {@code dream_walk} effect enters the mirror layer; sleeping again while
- * dreaming returns to the bound anchor (or the entry point).</p>
+ * <p>A player carrying the {@code dream_walk} effect may use the gesture at any time of the day.
+ * Such a player lies still for {@link #DREAM_ENTRY_DELAY} ticks first and only then slips into the
+ * mirror layer, so the dream never starts on the very tick of the gesture and an interrupted sleep
+ * simply cancels it. Sleeping again while dreaming returns to the bound anchor (or the entry
+ * point).</p>
  */
 @EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID)
 public final class DreamSleepEvents {
+    /**
+     * Ticks a ground sleeper with the dream_walk effect has to stay asleep before the dream starts.
+     * Kept below the vanilla 100 tick deep-sleep threshold, so entering the dream can never turn
+     * into a "everybody slept" night skip.
+     */
+    private static final int DREAM_ENTRY_DELAY = 60;
+
+    /** Ground sleepers on their way into the dream, keyed by player UUID, value = ticks slept. */
+    private static final Map<UUID, Integer> PENDING_DREAM_ENTRY = new HashMap<>();
+
     /**
      * Set while this class wakes a player itself. The resulting {@link PlayerWakeUpEvent} must not
      * be treated as the end of a dream (dream entry) or as a normal wake-up (dream exit).
@@ -84,8 +103,13 @@ public final class DreamSleepEvents {
         cancelUse(event);
     }
 
+    /**
+     * Dream walkers may lie down on any block at any time of the day; everybody else keeps the
+     * vanilla rule of needing the night.
+     */
     private static boolean canSleepOnGround(ServerPlayer player, ServerLevel level) {
-        return level.isNight()
+        boolean dreamWalk = player.hasEffect(DWRegistry.DREAM_WALK);
+        return (dreamWalk || level.isNight())
                 && player.onGround()
                 && !player.isPassenger()
                 && !player.isSleeping()
@@ -99,24 +123,65 @@ public final class DreamSleepEvents {
         if (!player.hasEffect(DWRegistry.DREAM_WALK)) {
             return;
         }
-        // Sleeping is only the doorway: leave the bed right away and step into the mirror layer.
-        // The wake-up is internal, so it must not be mistaken for a dream exit.
+        // From here the sleep is only the doorway: the body stays in bed until the delay ran out,
+        // and the dream is dropped again if the sleeper is woken up in the meantime.
+        PENDING_DREAM_ENTRY.put(player.getUUID(), 0);
+    }
+
+    /**
+     * Counts the ticks every ground sleeper waits for the dream and starts it once the delay is
+     * over. Waking up, losing the effect, a dream entered some other way or a disconnect drops the
+     * pending entry instead of entering the dream.
+     */
+    @SubscribeEvent
+    public static void onServerTick(ServerTickEvent.Post event) {
+        if (PENDING_DREAM_ENTRY.isEmpty()) {
+            return;
+        }
+        MinecraftServer server = event.getServer();
+        Iterator<Map.Entry<UUID, Integer>> iterator = PENDING_DREAM_ENTRY.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<UUID, Integer> entry = iterator.next();
+            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+            if (player == null
+                    || DreamManager.isDreaming(player)
+                    || !player.isSleeping()
+                    || !player.hasEffect(DWRegistry.DREAM_WALK)) {
+                iterator.remove();
+                continue;
+            }
+            int slept = entry.getValue() + 1;
+            if (slept < DREAM_ENTRY_DELAY) {
+                entry.setValue(slept);
+                continue;
+            }
+            iterator.remove();
+            enterDreamFromGround(player);
+        }
+    }
+
+    /**
+     * Leaves the bed after the delay but keeps the sleeping pose, so other players still see the
+     * dreamer lying there while the client shows the mirror layer. The wake-up is internal, so it
+     * must not be mistaken for a dream exit.
+     */
+    private static void enterDreamFromGround(ServerPlayer player) {
         wakeSilently(player);
         DreamManager.enterDream(player);
+    }
+
+    /** Mounting or dismounting changes who owns the movement, so the dream body is re-applied. */
+    @SubscribeEvent
+    public static void onMount(EntityMountEvent event) {
+        if (event.getEntityMounting() instanceof ServerPlayer player && DreamManager.isDreaming(player)) {
+            DreamManager.applyDreamPose(player);
+        }
     }
 
     /**
      * Keeps a sleeper without a bed asleep: vanilla reports {@code NOT_POSSIBLE_HERE} (no bed) and
      * {@code NOT_POSSIBLE_NOW} (daytime) every tick, both of which would wake the player up.
      */
-    /** Mounting or dismounting changes who owns the movement, so the dream body is re-applied. */
-    @SubscribeEvent
-    public static void onMount(EntityMountEvent event) {
-        if (event.getEntityMounting() instanceof ServerPlayer player && DreamManager.isDreaming(player)) {
-            DreamManager.refreshDreamMovement(player);
-        }
-    }
-
     @SubscribeEvent
     public static void onContinueSleeping(CanContinueSleepingEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
@@ -144,6 +209,11 @@ public final class DreamSleepEvents {
             return;
         }
         if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        // A ground sleep that is interrupted before the delay ran out never becomes a dream, and it
+        // does not leave dream clay behind either.
+        if (PENDING_DREAM_ENTRY.remove(player.getUUID()) != null) {
             return;
         }
 
@@ -207,7 +277,6 @@ public final class DreamSleepEvents {
     public static void onLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player && DreamManager.isDreaming(player)) {
             DreamManager.setDreaming(player, true);
-            DreamManager.grantDreamMovement(player);
             DreamPatchSync.sendAround(player);
         }
     }
