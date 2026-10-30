@@ -75,6 +75,20 @@ public final class DWPayloads {
         }
     }
 
+    /** IDs of the dream-only entities the client is allowed to render. */
+    public record DreamEntitiesPayload(List<Integer> ids) implements CustomPacketPayload {
+        public static final Type<DreamEntitiesPayload> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath(DreamWorldNeoForge121.MOD_ID, "dream_entities"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, DreamEntitiesPayload> STREAM_CODEC =
+                StreamCodec.composite(ByteBufCodecs.VAR_INT.apply(ByteBufCodecs.list()),
+                        DreamEntitiesPayload::ids, DreamEntitiesPayload::new);
+
+        @Override
+        public Type<DreamEntitiesPayload> type() {
+            return TYPE;
+        }
+    }
+
     @SubscribeEvent
     public static void register(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
@@ -84,6 +98,10 @@ public final class DWPayloads {
                         }));
         registrar.playToClient(GraffitiListPayload.TYPE, GraffitiListPayload.STREAM_CODEC,
                 new DirectionalPayloadHandler<>(DWClientPayloadHandler::handleGraffitiList,
+                        (payload, context) -> {
+                        }));
+        registrar.playToClient(DreamEntitiesPayload.TYPE, DreamEntitiesPayload.STREAM_CODEC,
+                new DirectionalPayloadHandler<>(DWClientPayloadHandler::handleDreamEntities,
                         (payload, context) -> {
                         }));
         registrar.playToClient(DreamPatchPayload.TYPE, DreamPatchPayload.STREAM_CODEC,

@@ -5,7 +5,8 @@
     "BoatDreamMixin",
     "DWLivingEntityAccessor",
     "DreamPatchMixin",
-    "DreamMoveMixin"
+    "DreamMoveMixin",
+    "DreamEntityTrackingMixin"
   ],
   "client": [],
   "injectors": {

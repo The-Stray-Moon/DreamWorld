@@ -97,7 +97,7 @@ public final class DreamClientPatches {
         }
     }
 
-    private static void applyChunk(long chunkLong) {
+    public static void applyChunk(long chunkLong) {
         ClientLevel level = Minecraft.getInstance().level;
         if (level == null) {
             return;

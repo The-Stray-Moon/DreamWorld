@@ -51,6 +51,9 @@ public final class DreamMobs {
                 if (spawnTick) {
                     topUp(level, player);
                 }
+                // Keep the client visibility list in step with spawns, deaths and cleanups.
+                DreamEntities.sync(player);
+                DreamEntities.refreshVisibility(player);
             }
             if (!hasDreamer) {
                 discardRabbits(level);
@@ -110,7 +113,9 @@ public final class DreamMobs {
             }
             rabbit.moveTo(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D,
                     level.random.nextFloat() * 360.0F, 0.0F);
+            DreamEntities.setDreamOnly(rabbit, true);
             if (level.addFreshEntity(rabbit)) {
+                DreamEntities.syncAll(level);
                 return;
             }
             rabbit.discard();
@@ -151,6 +156,8 @@ public final class DreamMobs {
             }
         }
         for (DreamRabbitEntity rabbit : rabbits) {
+            // The rabbit leaves the dream world: it drops dream clay where it disappeared.
+            DreamEntities.leaveDream(rabbit);
             rabbit.discard();
         }
     }

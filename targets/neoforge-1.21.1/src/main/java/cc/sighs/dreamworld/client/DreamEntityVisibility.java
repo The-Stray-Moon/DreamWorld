@@ -1,7 +1,6 @@
 package cc.sighs.dreamworld.client;
 
 import cc.sighs.dreamworld.DreamWorldNeoForge121;
-import cc.sighs.dreamworld.entity.DreamRabbitEntity;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.Minecraft;
@@ -37,38 +36,14 @@ public final class DreamEntityVisibility {
             return;
         }
         LivingEntity entity = event.getEntity();
-        if (entity instanceof Player || entity instanceof DreamRabbitEntity) {
+        if (entity instanceof Player) {
             return;
         }
-        event.setCanceled(true);
-    }
-
-    /**
-     * A waking client may still hold the rabbits of its own dream: the server removes them, but the
-     * removal packet can arrive later, so the local copies are dropped as soon as the state flips.
-     */
-    @SubscribeEvent
-    public static void onClientTick(ClientTickEvent.Post event) {
-        boolean dreaming = DreamClientState.isDreaming();
-        if (wasDreaming && !dreaming) {
-            discardRabbits(Minecraft.getInstance().level);
-        }
-        wasDreaming = dreaming;
-    }
-
-    private static void discardRabbits(ClientLevel level) {
-        if (level == null) {
-            return;
-        }
-        // The ids are collected first, removing entities while iterating the level would be unsafe.
-        List<Integer> ids = new ArrayList<>();
-        for (Entity entity : level.entitiesForRendering()) {
-            if (entity instanceof DreamRabbitEntity) {
-                ids.add(entity.getId());
-            }
-        }
-        for (int id : ids) {
-            level.removeEntity(id, Entity.RemovalReason.DISCARDED);
+        // Dream-side creatures are the only living things a dreamer may see; everything else of the
+        // real world is hidden. The server only sends dream creatures to dreamers anyway, this keeps
+        // the shared real entities out of the view.
+        if (!DreamClientState.dreamEntityIds().contains(entity.getId())) {
+            event.setCanceled(true);
         }
     }
 }

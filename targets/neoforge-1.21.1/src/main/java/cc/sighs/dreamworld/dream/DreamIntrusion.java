@@ -64,26 +64,28 @@ public final class DreamIntrusion {
     }
 
     /**
-     * Puts a creature to sleep instead of killing it; it stays where it stands. The dream-side and
-     * the real-side kill share this single call, and it is idempotent: a creature that already
-     * sleeps from an earlier intrusion is left alone, so a hit is never processed twice.
+     * Moves a creature to the opposite layer instead of killing it.
+     *
+     * <p>An intrusion is never a death: the creature leaves the layer it stood on without triggering
+     * a death event or loot, and a sleeping copy appears on the other layer at the same position (or
+     * at the anchor, when one is bound). The copy belongs to that layer only: dream copies are kept
+     * away from players that are not dreaming.</p>
      */
     public static void transferLiving(ServerPlayer actor, ServerLevel level, Entity creature) {
-        if (creature instanceof Player || !creature.isAlive() || isAsleep(creature)) {
+        if (creature instanceof Player || !creature.isAlive()) {
             return;
         }
-        creature.setDeltaMovement(Vec3.ZERO);
-        creature.setPose(Pose.SLEEPING);
-        if (creature instanceof Mob mob) {
-            mob.setNoAi(true);
-            mob.setPersistenceRequired();
+        boolean onDreamSide = DreamEntities.isDreamOnly(creature);
+        BlockPos target = DreamManager.intrusionTarget(actor, creature.blockPosition());
+        Entity copy = DreamEntities.sleepingCopy(level, creature, target, !onDreamSide);
+        if (copy != null) {
+            if (onDreamSide) {
+                // A dream creature moving to reality leaves clay on the dream side.
+                DreamEntities.leaveDream(creature);
+            }
+            creature.discard();
         }
-    }
-
-    /** A creature that an earlier intrusion already put to sleep. */
-    private static boolean isAsleep(Entity creature) {
-        return creature.getPose() == Pose.SLEEPING
-                && (!(creature instanceof Mob mob) || mob.isNoAi());
+        DreamEntities.syncAll(level);
     }
 
     /** Alias kept for the tool hooks: the creature is moved to sleep, not killed. */

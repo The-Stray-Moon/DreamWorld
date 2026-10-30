@@ -61,7 +61,10 @@ public final class DreamManager {
         }
         refreshAnchor(player);
         setDreaming(player, true);
+        applyDreamBody(player);
         DreamPatchSync.sendAround(player);
+        DreamEntities.sync(player);
+        DreamEntities.refreshVisibility(player);
     }
 
     /** Ends the dream. The body only moves when an anchor is bound. */
@@ -70,6 +73,8 @@ public final class DreamManager {
             return;
         }
         setDreaming(player, false);
+        restoreDreamBody(player);
+        DreamEntities.refreshVisibility(player);
         Destination destination = anchorDestination(player);
         if (destination != null) {
             teleport(player, destination.level(), destination.pos());
@@ -115,11 +120,23 @@ public final class DreamManager {
     // ---------------------------------------------------------- dream movement
 
     /** A dreamer lies down on the shared side; a rider keeps the vehicle pose instead. */
-    public static void applyDreamPose(ServerPlayer player) {
+    public static void applyDreamBody(ServerPlayer player) {
         if (!isDreaming(player)) {
             return;
         }
+        // Movement stays completely vanilla: the dream terrain is swapped in on the client, so the
+        // dreamer walks on dream blocks with normal collision and gravity.
         player.setForcedPose(player.isPassenger() ? null : Pose.SLEEPING);
+    }
+
+    /** Clears the forced pose when the dream ends. */
+    public static void restoreDreamBody(ServerPlayer player) {
+        player.setForcedPose(null);
+    }
+
+    /** Kept for the sleep hooks that only need the pose. */
+    public static void applyDreamPose(ServerPlayer player) {
+        applyDreamBody(player);
     }
 
     /**

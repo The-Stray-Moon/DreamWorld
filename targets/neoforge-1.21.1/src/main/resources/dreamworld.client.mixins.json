@@ -5,7 +5,7 @@
   "client": [
     "ClientLevelMixin",
     "ClientLevelPatchMixin",
-    "LevelRendererMixin"
+    "ModelBlockRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

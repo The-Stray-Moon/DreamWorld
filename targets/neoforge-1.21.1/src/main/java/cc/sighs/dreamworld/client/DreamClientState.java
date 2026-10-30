@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
 public final class DreamClientState {
     private static volatile boolean dreaming;
     private static volatile List<BlockPos> graffiti = List.of();
+    private static volatile java.util.Set<Integer> dreamEntityIds = java.util.Set.of();
 
     private DreamClientState() {
     }
@@ -27,5 +28,13 @@ public final class DreamClientState {
 
     public static void setGraffiti(List<BlockPos> positions) {
         graffiti = List.copyOf(positions);
+    }
+
+    public static java.util.Set<Integer> dreamEntityIds() {
+        return dreamEntityIds;
+    }
+
+    public static void setDreamEntityIds(List<Integer> ids) {
+        dreamEntityIds = java.util.Set.copyOf(ids);
     }
 }

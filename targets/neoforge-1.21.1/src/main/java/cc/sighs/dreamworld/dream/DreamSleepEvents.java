@@ -49,8 +49,14 @@ public final class DreamSleepEvents {
      */
     private static final int DREAM_ENTRY_DELAY = 60;
 
+    /** Sleepers on their way out of the dream, keyed by player UUID, value = ticks slept. */
+    private static final int DREAM_EXIT_DELAY = 60;
+
     /** Ground sleepers on their way into the dream, keyed by player UUID, value = ticks slept. */
     private static final Map<UUID, Integer> PENDING_DREAM_ENTRY = new HashMap<>();
+
+    /** Dreamers on their way back to reality, keyed by player UUID, value = ticks slept. */
+    private static final Map<UUID, Integer> PENDING_DREAM_EXIT = new HashMap<>();
 
     /**
      * Set while this class wakes a player itself. The resulting {@link PlayerWakeUpEvent} must not
@@ -92,7 +98,13 @@ public final class DreamSleepEvents {
         }
 
         if (DreamManager.isDreaming(player)) {
-            leaveDream(player);
+            // Leaving is a sleep as well: lie down first, and only wake up in reality after the
+            // same delay as entering. Waking up in between cancels the exit.
+            if (!player.isSleeping() && !player.isPassenger() && !player.isSpectator() && player.isAlive()) {
+                player.startSleeping(player.blockPosition());
+                level.updateSleepingPlayerList();
+                PENDING_DREAM_EXIT.put(player.getUUID(), 0);
+            }
             cancelUse(event);
             return;
         }
@@ -135,28 +147,45 @@ public final class DreamSleepEvents {
      */
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
-        if (PENDING_DREAM_ENTRY.isEmpty()) {
-            return;
-        }
         MinecraftServer server = event.getServer();
-        Iterator<Map.Entry<UUID, Integer>> iterator = PENDING_DREAM_ENTRY.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<UUID, Integer> entry = iterator.next();
-            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
-            if (player == null
-                    || DreamManager.isDreaming(player)
-                    || !player.isSleeping()
-                    || !player.hasEffect(DWRegistry.DREAM_WALK)) {
+        if (!PENDING_DREAM_ENTRY.isEmpty()) {
+            Iterator<Map.Entry<UUID, Integer>> iterator = PENDING_DREAM_ENTRY.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<UUID, Integer> entry = iterator.next();
+                ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+                if (player == null
+                        || DreamManager.isDreaming(player)
+                        || !player.isSleeping()
+                        || !player.hasEffect(DWRegistry.DREAM_WALK)) {
+                    iterator.remove();
+                    continue;
+                }
+                int slept = entry.getValue() + 1;
+                if (slept < DREAM_ENTRY_DELAY) {
+                    entry.setValue(slept);
+                    continue;
+                }
                 iterator.remove();
-                continue;
+                enterDreamFromGround(player);
             }
-            int slept = entry.getValue() + 1;
-            if (slept < DREAM_ENTRY_DELAY) {
-                entry.setValue(slept);
-                continue;
+        }
+        if (!PENDING_DREAM_EXIT.isEmpty()) {
+            Iterator<Map.Entry<UUID, Integer>> iterator = PENDING_DREAM_EXIT.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<UUID, Integer> entry = iterator.next();
+                ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+                if (player == null || !DreamManager.isDreaming(player) || !player.isSleeping()) {
+                    iterator.remove();
+                    continue;
+                }
+                int slept = entry.getValue() + 1;
+                if (slept < DREAM_EXIT_DELAY) {
+                    entry.setValue(slept);
+                    continue;
+                }
+                iterator.remove();
+                leaveDream(player);
             }
-            iterator.remove();
-            enterDreamFromGround(player);
         }
     }
 
@@ -216,6 +245,10 @@ public final class DreamSleepEvents {
         if (PENDING_DREAM_ENTRY.remove(player.getUUID()) != null) {
             return;
         }
+        // Woken up before the exit sleep was deep enough: stay in the dream.
+        if (PENDING_DREAM_EXIT.remove(player.getUUID()) != null) {
+            return;
+        }
 
         Optional<BlockPos> sleptAt = player.getSleepingPos();
         if (DreamManager.isDreaming(player)) {
@@ -225,7 +258,7 @@ public final class DreamSleepEvents {
             if (server != null) {
                 server.execute(() -> {
                     DreamManager.wakeUp(player);
-                    player.removeEffect(DWRegistry.DREAM_WALK);
+                    spawnDreamClay(player);
                 });
             }
             return;
@@ -244,11 +277,21 @@ public final class DreamSleepEvents {
         if (!DreamManager.isDreaming(player)) {
             return;
         }
+        PENDING_DREAM_EXIT.remove(player.getUUID());
         if (player.isSleeping()) {
             wakeSilently(player);
         }
         DreamManager.wakeUp(player);
-        player.removeEffect(DWRegistry.DREAM_WALK);
+        // The dream-walk effect is not consumed: it keeps running until its own duration ends.
+        // Waking up from the dream leaves dream clay behind, exactly like a normal night's sleep.
+        spawnDreamClay(player);
+    }
+
+    /** Drops dream clay at the dreamer's wake-up position in the real world. */
+    private static void spawnDreamClay(ServerPlayer player) {
+        if (player.level() instanceof ServerLevel level) {
+            DreamClayEntity.spawnNear(level, Vec3.atBottomCenterOf(player.blockPosition()));
+        }
     }
 
     private static void wakeSilently(ServerPlayer player) {
