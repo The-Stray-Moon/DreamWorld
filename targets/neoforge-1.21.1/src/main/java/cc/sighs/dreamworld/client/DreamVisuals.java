@@ -23,14 +23,13 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
-import net.neoforged.neoforge.client.event.ViewportEvent;
 
 /**
  * Client-side dream world visuals: pink dream fog and the graffiti tunnels.
  *
- * <p>The pink block tint is not applied here: it lives in
- * {@code cc.sighs.dreamworld.mixin.client.LevelRendererMixin}, which tints the chunk layers only, so
- * entities, particles and the HUD keep their normal colours.</p>
+ * <p>The pink block tint is not applied here either: it lives in
+ * {@code cc.sighs.dreamworld.mixin.client.ModelBlockRendererMixin}, which recolours block faces
+ * while the chunk mesh is built, so entities, particles and the HUD keep their normal colours.</p>
  */
 @EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID, value = Dist.CLIENT)
 public final class DreamVisuals {
@@ -44,9 +43,6 @@ public final class DreamVisuals {
     private static final float TUNNEL_GREEN = 0.8F;
     private static final float TUNNEL_BLUE = 1.0F;
     private static final float TUNNEL_ALPHA = 0.55F;
-    private static final float FOG_RED = 0.78F;
-    private static final float FOG_GREEN = 0.55F;
-    private static final float FOG_BLUE = 0.72F;
 
     private static List<BlockPos> cachedGraffiti;
     private static List<TunnelEdge> cachedTunnels = List.of();
@@ -68,15 +64,6 @@ public final class DreamVisuals {
         }
     }
 
-    @SubscribeEvent
-    public static void onComputeFogColor(ViewportEvent.ComputeFogColor event) {
-        if (!DreamClientState.isDreaming()) {
-            return;
-        }
-        event.setRed(FOG_RED);
-        event.setGreen(FOG_GREEN);
-        event.setBlue(FOG_BLUE);
-    }
 
     /**
      * Tunnels currently known to the client. The list is rebuilt only when the synced graffiti list

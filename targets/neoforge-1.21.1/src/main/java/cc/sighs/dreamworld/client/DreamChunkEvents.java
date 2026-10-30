@@ -4,6 +4,8 @@ import cc.sighs.dreamworld.DreamWorldNeoForge121;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.minecraft.client.Minecraft;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
 
 /**
@@ -16,7 +18,25 @@ import net.neoforged.neoforge.event.level.ChunkEvent;
  */
 @EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID, value = Dist.CLIENT)
 public final class DreamChunkEvents {
+    private static boolean lastDreaming;
+
     private DreamChunkEvents() {
+    }
+
+    /**
+     * Safety net for the baked block tint: if the state flips without the payload handler having
+     * rebuilt the meshes (login restore, reconnect), rebuild them on the next client tick.
+     */
+    @SubscribeEvent
+    public static void onClientTick(ClientTickEvent.Post event) {
+        boolean dreaming = DreamClientState.isDreaming();
+        if (dreaming != lastDreaming) {
+            lastDreaming = dreaming;
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.level != null) {
+                minecraft.levelRenderer.allChanged();
+            }
+        }
     }
 
     @SubscribeEvent

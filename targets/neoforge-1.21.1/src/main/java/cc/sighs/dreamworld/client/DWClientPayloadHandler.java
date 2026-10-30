@@ -20,13 +20,18 @@ public final class DWClientPayloadHandler {
                 DreamClientState.setDreaming(false);
                 DreamClientPatches.restoreAll();
             }
-            // The dream tint is baked into the block faces, so the chunk meshes must be rebuilt on
+            // The dream tint is baked into block faces, so the chunk meshes must be rebuilt on
             // every transition: pink going in, original colours coming out.
-            Minecraft minecraft = Minecraft.getInstance();
-            if (minecraft.level != null) {
-                minecraft.levelRenderer.allChanged();
-            }
+            rebuildBlockMeshes();
         });
+    }
+
+    /** Valid only on the client thread; payload handlers already run there. */
+    private static void rebuildBlockMeshes() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level != null) {
+            minecraft.levelRenderer.allChanged();
+        }
     }
 
     public static void handleGraffitiList(DWPayloads.GraffitiListPayload payload, IPayloadContext context) {

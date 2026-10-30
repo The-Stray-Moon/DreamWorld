@@ -16,8 +16,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  */
 @Mixin(ClientLevel.class)
 public abstract class ClientLevelMixin {
-    /** Deeper blue than any vanilla biome, matching the palette of the dream world. */
-    private static final Vec3 dreamworld$DREAM_SKY_COLOR = new Vec3(0.23D, 0.45D, 0.95D);
+    /** Fixed dream sky: rgb(73, 128, 146). */
+    private static final Vec3 dreamworld$DREAM_SKY_COLOR =
+            new Vec3(73.0D / 255.0D, 128.0D / 255.0D, 146.0D / 255.0D);
     /** 0.0 is noon: the sun sits at its highest point and the sunrise glow is not drawn. */
     private static final float dreamworld$DREAM_TIME_OF_DAY = 0.0F;
 
