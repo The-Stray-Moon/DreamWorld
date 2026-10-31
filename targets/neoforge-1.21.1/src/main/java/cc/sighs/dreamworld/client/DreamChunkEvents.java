@@ -7,7 +7,9 @@ import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -31,9 +33,19 @@ import net.neoforged.neoforge.event.level.ChunkEvent;
 public final class DreamChunkEvents {
     /** Ticks between two sweeps that drop blubs from a non-dreaming level. */
     private static final int BLUB_SWEEP_INTERVAL = 20;
+    /**
+     * How long the local body may be held while waiting for its chunk's dream state.
+     *
+     * <p>A safety valve only: the payload is sent together with the chunk, so the wait is normally a
+     * few ticks. Holding forever would be worse than a wrong position.</p>
+     */
+    private static final int MAX_HOLD_TICKS = 100;
 
     private static boolean lastDreaming;
     private static int sweepTicks;
+    /** Position the local body is held at while its chunk's dream state is still on its way. */
+    private static Vec3 holdPosition;
+    private static int holdTicks;
 
     private DreamChunkEvents() {
     }
@@ -62,6 +74,61 @@ public final class DreamChunkEvents {
         DreamClientPatches.reset();
         lastDreaming = false;
         sweepTicks = 0;
+        holdPosition = null;
+        holdTicks = 0;
+    }
+
+    /**
+     * Keeps the body still until this client knows which layer it is on and what that layer shows
+     * under it.
+     *
+     * <p>On login the client is simulating the real world for as long as the dream state packet and
+     * the chunk's patch set are in flight. Where the dream has a floor and reality does not - which
+     * is exactly the terrain the dreamer was standing on when they logged out - the body drops
+     * through it, and because a dreamer's movement is trusted, the server makes that drop permanent.
+     * The body is therefore pinned in place from the very first tick until both answers are in; then
+     * normal collision against the dream layer takes over. Nothing is corrected afterwards, so no
+     * position ever has to be guessed.</p>
+     */
+    @SubscribeEvent
+    public static void onClientTickPre(ClientTickEvent.Pre event) {
+        Minecraft minecraft = Minecraft.getInstance();
+        ClientLevel level = minecraft.level;
+        LocalPlayer player = minecraft.player;
+        if (level == null || player == null || !shouldHoldBody(player) || holdTicks >= MAX_HOLD_TICKS) {
+            holdPosition = null;
+            holdTicks = 0;
+            return;
+        }
+        if (holdPosition == null) {
+            holdPosition = player.position();
+        }
+        holdTicks++;
+        player.setDeltaMovement(Vec3.ZERO);
+        player.setPos(holdPosition.x, holdPosition.y, holdPosition.z);
+        // Keep the interpolation anchors on the held spot, or the renderer eases from the old one.
+        player.xo = holdPosition.x;
+        player.yo = holdPosition.y;
+        player.zo = holdPosition.z;
+        player.fallDistance = 0.0F;
+    }
+
+    /**
+     * {@return whether the body has to stay put because the client cannot simulate it yet}
+     *
+     * <p>Two unknowns qualify. First, the server has not said whether this client is dreaming at all:
+     * whatever the body would collide with is a guess. Second, it is dreaming but the patch set of
+     * its own chunk has not arrived: the chunk still holds reality, which is not the layer to fall
+     * onto.</p>
+     */
+    private static boolean shouldHoldBody(LocalPlayer player) {
+        if (!DreamClientState.isDreamStateKnown()) {
+            return true;
+        }
+        if (!DreamClientState.isDreaming()) {
+            return false;
+        }
+        return !DreamClientPatches.knowsChunk(player.chunkPosition());
     }
 
     @SubscribeEvent

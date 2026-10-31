@@ -19,6 +19,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.RelativeMovement;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
@@ -58,7 +59,7 @@ public final class DreamManager {
     /** Low-level flag write; callers normally use {@link #enterDream} / {@link #wakeUp}. */
     public static void setDreaming(ServerPlayer player, boolean dreaming) {
         tag(player).putBoolean(DREAMING, dreaming);
-        PacketDistributor.sendToPlayer(player, new DWPayloads.DreamStatePayload(dreaming));
+        pushDreamState(player);
         // Dream rabbits are filtered out of the tracking set of non-dreaming players, so the set
         // has to be re-evaluated here to send or remove them right away.
         DreamMobs.refreshTracking(player);
@@ -68,6 +69,17 @@ public final class DreamManager {
         if (server != null) {
             broadcastDreamers(server);
         }
+    }
+
+    /**
+     * Tells one client which layer it should be showing.
+     *
+     * <p>Sent on every login, dreaming or not: the client holds the body still until this packet
+     * arrives, because without it there is no telling which layer the body would be colliding with.
+     * </p>
+     */
+    public static void pushDreamState(ServerPlayer player) {
+        PacketDistributor.sendToPlayer(player, new DWPayloads.DreamStatePayload(isDreaming(player)));
     }
 
     /**
@@ -87,19 +99,33 @@ public final class DreamManager {
         PacketDistributor.sendToAllPlayers(new DWPayloads.DreamersPayload(dreamers));
     }
 
-    /** Starts the dream in place: no teleport, the client switches to the patched dream layer. */
+    /**
+     * Starts the dream.
+     *
+     * <p>The body starts where it is unless a spear was thrown inside the dream: that anchor names a
+     * dream position, so entering the dream has to move the body there for the promise "the dream
+     * always starts at the anchor" to hold. A spear thrown in reality is not consulted here - it is
+     * the way back out, not the way in.</p>
+     */
     public static void enterDream(ServerPlayer player) {
         if (isDreaming(player)) {
             return;
         }
         refreshAnchor(player);
         setDreaming(player, true);
+        Destination destination = anchorDestination(player, true);
+        if (destination != null) {
+            // The anchor was picked by this player inside the dream, so it is a valid dream spot even
+            // if reality holds a block there; settling afterwards would drag the body off it.
+            teleport(player, destination.level(), destination.pos(), true);
+        } else {
+            // The dream layer may have a block where reality has none; the body has to leave it or
+            // the client draws it inside the ground.
+            settleOutOfTerrain(player);
+        }
         DreamPatchSync.sendAround(player);
         DreamEntities.sync(player);
         DreamEntities.refreshVisibility(player);
-        // The dream layer may have a block where reality has none; the body has to leave it or the
-        // client draws it inside the ground.
-        settleOutOfTerrain(player);
     }
 
     /** Ends the dream. The body only moves when an anchor is bound. */
@@ -113,24 +139,26 @@ public final class DreamManager {
             // Nobody may be left in the dream layer: its rabbits go with the last dreamer.
             DreamMobs.discardIfNoDreamers(level);
         }
-        Destination destination = anchorDestination(player);
+        Destination destination = anchorDestination(player, false);
         if (destination != null) {
             teleport(player, destination.level(), destination.pos());
         }
     }
 
     /**
-     * Destination of the bound anchor for a player who is leaving the dream.
+     * Destination of the bound anchor on one side of the mirror.
      *
-     * <p>Only an anchor that lives in reality can pull a dreamer out: waking up always lands the body
-     * on the real layer, so a spear thrown inside the dream has nothing to offer here. A block anchor
-     * resolves to its stored position, an entity anchor to wherever that entity currently stands.
-     * </p>
+     * <p>An anchor names a position on its own layer, so each direction only honours the anchor of
+     * the opposite side: a spear thrown in reality brings the dreamer back out, a spear thrown inside
+     * the dream brings them in. A block anchor resolves to its stored position, an entity anchor to
+     * wherever that entity currently stands.</p>
+     *
+     * @param dreamSide whether the destination is wanted for entering the dream
      */
     @Nullable
-    private static Destination anchorDestination(ServerPlayer player) {
+    private static Destination anchorDestination(ServerPlayer player, boolean dreamSide) {
         MinecraftServer server = player.getServer();
-        if (server == null || isAnchorOnDreamSide(player)) {
+        if (server == null || isAnchorOnDreamSide(player) != dreamSide) {
             return null;
         }
         Optional<BlockPos> anchorPos = anchorPos(player);
@@ -153,7 +181,21 @@ public final class DreamManager {
 
     /** Teleports without suffocating: a solid destination block moves the player one block up. */
     public static void teleport(ServerPlayer player, ServerLevel target, BlockPos pos) {
-        boolean blocked = !target.getBlockState(pos).getCollisionShape(target, pos).isEmpty();
+        teleport(player, target, pos, false);
+    }
+
+    /**
+     * Teleports to a position and picks the obstacle test from the layer it belongs to.
+     *
+     * <p>A dream position has to be judged by the dream terrain: reality may hold a block exactly
+     * there while the dream shows air, and lifting the body out of a block it cannot even see would
+     * move it off the anchor it was told to arrive at.</p>
+     */
+    private static void teleport(ServerPlayer player, ServerLevel target, BlockPos pos, boolean dreamSide) {
+        BlockState state = dreamSide
+                ? DreamPatches.get(target).stateAt(target, pos)
+                : target.getBlockState(pos);
+        boolean blocked = !state.getCollisionShape(target, pos).isEmpty();
         double y = blocked ? pos.getY() + 1.0D : pos.getY();
         player.teleportTo(target, pos.getX() + 0.5D, y, pos.getZ() + 0.5D,
                 Set.<RelativeMovement>of(), player.getYRot(), player.getXRot());
@@ -168,8 +210,7 @@ public final class DreamManager {
      * <p>While dreaming the body follows the client, and the client collides with the dream layer
      * while the server keeps reality. The two disagree wherever the world was edited, so a body can
      * be saved inside a real block - or inside a dream block, which the client then draws around the
-     * player. Login would drop the player straight into the ground, which is the "spawn underground"
-     * report. The body is moved to the first spot above it that is free on both layers.</p>
+     * player. The body is moved to the first spot above it that is free on both layers.</p>
      *
      * <p>Both layers are checked on purpose: a spot that is only free in reality would still be
      * rendered as a block around the player, and the client would push them out again.</p>

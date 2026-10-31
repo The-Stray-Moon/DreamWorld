@@ -63,6 +63,17 @@ public final class DreamClientPatches {
     }
 
     /**
+     * {@return whether this client has been told what the dream layer shows in {@code chunk}}
+     *
+     * <p>An empty patch set still counts: the server sends every chunk it sends chunks for, so a
+     * known-but-empty entry means "this chunk is identical on both layers", which is a real answer
+     * and not a missing one.</p>
+     */
+    public static boolean knowsChunk(ChunkPos chunk) {
+        return PATCHES.containsKey(chunk.toLong());
+    }
+
+    /**
      * Forgets every patch of the previous session.
      *
      * <p>The cache is static, so without this a client that disconnects while dreaming would apply

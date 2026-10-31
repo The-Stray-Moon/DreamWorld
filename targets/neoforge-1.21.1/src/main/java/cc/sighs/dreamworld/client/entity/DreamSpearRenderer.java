@@ -15,7 +15,9 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemDisplayContext;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Renderer for the thrown dream alloy spear.
@@ -56,6 +58,9 @@ public class DreamSpearRenderer extends EntityRenderer<DreamSpearEntity> {
     @Override
     public void render(DreamSpearEntity spear, float yaw, float partialTick, PoseStack poseStack,
             MultiBufferSource buffers, int packedLight) {
+        // An anchored spear is drawn on its host, not on the coordinates the entity happens to have:
+        // those arrive one round trip late and make the spear trail the body.
+        followHost(spear, partialTick, poseStack);
         poseStack.pushPose();
         // The trident's frame: the model pole runs along the flight direction. Reusing it keeps the
         // spear pointing where it actually travels instead of being billboarded at the camera.
@@ -77,6 +82,39 @@ public class DreamSpearRenderer extends EntityRenderer<DreamSpearEntity> {
     @Override
     public ResourceLocation getTextureLocation(DreamSpearEntity spear) {
         return TextureAtlas.LOCATION_BLOCKS;
+    }
+
+    /**
+     * Shifts the pose onto the creature the spear is stuck in.
+     *
+     * <p>The render dispatcher already translated the pose to the entity's own interpolated position,
+     * so only the difference to the host's position has to be applied here. Both positions use the
+     * same {@code lerp(partialTick, old, current)} the renderer itself uses, which keeps the spear
+     * interpolating in step with the body instead of snapping once per tick.</p>
+     */
+    private static void followHost(DreamSpearEntity spear, float partialTick, PoseStack poseStack) {
+        if (!spear.isAnchored()) {
+            return;
+        }
+        int hostId = spear.hostId();
+        if (hostId < 0) {
+            return;
+        }
+        Entity host = spear.level().getEntity(hostId);
+        if (host == null) {
+            return;
+        }
+        Vec3 target = renderPosition(host, partialTick).add(spear.hostOffset());
+        Vec3 self = renderPosition(spear, partialTick);
+        poseStack.translate(target.x - self.x, target.y - self.y, target.z - self.z);
+    }
+
+    /** Interpolated position of an entity for this frame, matching {@code EntityRenderDispatcher}. */
+    private static Vec3 renderPosition(Entity entity, float partialTick) {
+        return new Vec3(
+                Mth.lerp(partialTick, entity.xOld, entity.getX()),
+                Mth.lerp(partialTick, entity.yOld, entity.getY()),
+                Mth.lerp(partialTick, entity.zOld, entity.getZ()));
     }
 
     /**

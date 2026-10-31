@@ -10,6 +10,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
@@ -64,24 +66,26 @@ public final class DreamToolEvents {
     }
 
     /**
-     * A lethal hit from the dream alloy sword does not kill on either side of the mirror: the
-     * creature is put to sleep where it stands, alive and inert. Cancelling the damage keeps it out
-     * of death events, loot and XP. This hook serves the dreaming and the real-world hit alike, so
-     * there is no second path that could process the same creature twice.
+     * A lethal hit from the dream alloy gear does not kill on either side of the mirror: the creature
+     * is put to sleep where it stands, alive and inert. Cancelling the damage keeps it out of death
+     * events, loot and XP. This hook serves the dreaming and the real-world hit alike, so there is no
+     * second path that could process the same creature twice.
      *
-     * <p>Only a sword hit reaches this path. Any other killing blow goes on to be a normal death,
-     * which is what keeps a non-sword kill from carrying its victim into the dream.</p>
+     * <p>Two sources qualify: the sword's own hit, and the wand's blast, which is an explosion caused
+     * by the player. Any other killing blow goes on to be a normal death, which is what keeps an
+     * unrelated kill from carrying its victim across the mirror.</p>
      */
     @SubscribeEvent
     public static void onIncomingDamage(LivingIncomingDamageEvent event) {
         if (event.getEntity() instanceof Player || !event.getEntity().isAlive()) {
             return;
         }
-        Entity direct = event.getSource().getDirectEntity();
-        if (!(direct instanceof ServerPlayer player) || !(player.level() instanceof ServerLevel level)) {
+        DamageSource source = event.getSource();
+        if (!(source.getEntity() instanceof ServerPlayer player)
+                || !(player.level() instanceof ServerLevel level)) {
             return;
         }
-        if (!DreamIntrusion.isHoldingSword(player)) {
+        if (!isIntrudingHit(source, player)) {
             return;
         }
         if (event.getEntity().getHealth() - event.getAmount() > 0.0F) {
@@ -89,6 +93,16 @@ public final class DreamToolEvents {
         }
         event.setCanceled(true);
         DreamIntrusion.transferLiving(player, level, event.getEntity());
+    }
+
+    /** {@return whether this blow came from dream alloy gear that carries a kill across the mirror} */
+    private static boolean isIntrudingHit(DamageSource source, ServerPlayer player) {
+        // The sword hits directly, so the player is the direct entity of the damage.
+        if (DreamIntrusion.isHoldingSword(player) && source.getDirectEntity() instanceof ServerPlayer) {
+            return true;
+        }
+        // The wand damages through a player-caused explosion, which has no direct entity of its own.
+        return DreamIntrusion.isHoldingWand(player) && source.is(DamageTypes.PLAYER_EXPLOSION);
     }
 
     /**

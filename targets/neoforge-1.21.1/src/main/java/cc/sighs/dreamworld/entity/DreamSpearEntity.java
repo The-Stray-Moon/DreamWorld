@@ -30,9 +30,12 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.ItemSupplier;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
@@ -71,10 +74,29 @@ public class DreamSpearEntity extends Entity implements ItemSupplier {
     private static final EntityDataAccessor<Boolean> DATA_ANCHORED =
             SynchedEntityData.defineId(DreamSpearEntity.class, EntityDataSerializers.BOOLEAN);
 
+    /**
+     * Entity id of the creature the spear is stuck in, and the offset it sits at on that body.
+     *
+     * <p>Both are synced because the client has to ride the creature itself: waiting for the server
+     * position would make the spear trail behind the body by a round trip, which reads as stutter.
+     * An id of {@code -1} means the spear is anchored to the world instead.</p>
+     */
+    private static final EntityDataAccessor<Integer> DATA_HOST_ID =
+            SynchedEntityData.defineId(DreamSpearEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Float> DATA_OFFSET_X =
+            SynchedEntityData.defineId(DreamSpearEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Float> DATA_OFFSET_Y =
+            SynchedEntityData.defineId(DreamSpearEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Float> DATA_OFFSET_Z =
+            SynchedEntityData.defineId(DreamSpearEntity.class, EntityDataSerializers.FLOAT);
+
     @Nullable
     private UUID owner;
     @Nullable
     private UUID anchoredEntity;
+    /** Where on the anchored creature the spear sits, so it rides along with it. */
+    @Nullable
+    private Vec3 stickOffset;
     /** Previous client-side position, used to lay the trail along the travelled path. */
     @Nullable
     private Vec3 trailFrom;
@@ -92,6 +114,10 @@ public class DreamSpearEntity extends Entity implements ItemSupplier {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(DATA_DREAM_SIDE, false);
         builder.define(DATA_ANCHORED, false);
+        builder.define(DATA_HOST_ID, -1);
+        builder.define(DATA_OFFSET_X, 0.0F);
+        builder.define(DATA_OFFSET_Y, 0.0F);
+        builder.define(DATA_OFFSET_Z, 0.0F);
     }
 
     @Override
@@ -104,28 +130,34 @@ public class DreamSpearEntity extends Entity implements ItemSupplier {
         }
         super.tick();
         if (level().isClientSide) {
-            // The client does not simulate the flight, it only decorates it.
+            // The client does not simulate the flight, it only decorates it. Riding the host creature
+            // is handled by DreamSpearFollowMixin, so this class stays free of client-only logic.
             spawnFlightTrail();
             return;
         }
         if (isAnchored()) {
             setDeltaMovement(Vec3.ZERO);
-            if (!this.chunkForced) {
-                forceCurrentChunk();
-            }
+            followAnchoredEntity();
+            ensureForcedChunk();
             return;
         }
         Vec3 motion = getDeltaMovement();
         Vec3 next = new Vec3(motion.x * DRAG, motion.y - GRAVITY, motion.z * DRAG);
         setDeltaMovement(next);
-        boolean blocked = dreamSide() ? moveOverDreamTerrain(next) : moveNaturally(next);
-        if (blocked) {
-            anchor();
+
+        // Creatures have to be tested along the whole step, not at its end: the spear covers two and
+        // a half blocks per tick, so anything it passes between two ticks would be missed entirely.
+        // The search is bounded by the first solid block so a creature behind a wall is not picked.
+        Vec3 from = position();
+        Vec3 reach = clipToTerrain(from, from.add(next));
+        Entity target = findEntityAlong(from, reach);
+        if (target != null) {
+            stickInto(target, from, reach);
             return;
         }
-        Entity hit = findEntityHit();
-        if (hit != null) {
-            this.anchoredEntity = hit.getUUID();
+
+        boolean blocked = dreamSide() ? moveOverDreamTerrain(next) : moveNaturally(next);
+        if (blocked) {
             anchor();
         }
     }
@@ -134,6 +166,156 @@ public class DreamSpearEntity extends Entity implements ItemSupplier {
     private boolean moveNaturally(Vec3 motion) {
         move(MoverType.SELF, motion);
         return this.horizontalCollision || this.verticalCollision || onGround();
+    }
+
+    /** How far the step gets before a solid block stops it, on the layer the spear belongs to. */
+    private Vec3 clipToTerrain(Vec3 from, Vec3 to) {
+        if (!(level() instanceof ServerLevel serverLevel)) {
+            return to;
+        }
+        if (!dreamSide()) {
+            BlockHitResult hit = level().clip(new ClipContext(from, to, ClipContext.Block.COLLIDER,
+                    ClipContext.Fluid.NONE, this));
+            return hit.getType() == HitResult.Type.MISS ? to : hit.getLocation();
+        }
+        Vec3 direction = to.subtract(from);
+        int steps = Math.max(1, Mth.ceil(direction.length() / SWEEP_STEP));
+        for (int step = 1; step <= steps; step++) {
+            Vec3 point = from.add(direction.scale((double) step / steps));
+            if (dreamworld$collides(serverLevel, point)) {
+                return from.add(direction.scale((double) (step - 1) / steps));
+            }
+        }
+        return to;
+    }
+
+    /**
+     * First creature on the layer of this spear whose box the step passes through.
+     *
+     * <p>The layers share one server world, so a dream spear must ignore the real creatures a dreamer
+     * cannot see, and a real spear must ignore the dream copies.</p>
+     */
+    @Nullable
+    private Entity findEntityAlong(Vec3 from, Vec3 to) {
+        AABB sweep = getBoundingBox().expandTowards(to.subtract(from)).inflate(0.3D);
+        Entity nearest = null;
+        double nearestDistance = Double.MAX_VALUE;
+        for (Entity entity : level().getEntities(this, sweep)) {
+            if (!(entity instanceof LivingEntity living) || !living.isAlive() || living.isSpectator()) {
+                continue;
+            }
+            if (this.owner != null && this.owner.equals(living.getUUID())) {
+                continue;
+            }
+            if (DreamEntities.isDreamOnly(living) != dreamSide()) {
+                continue;
+            }
+            if (living.getBoundingBox().inflate(0.3D).clip(from, to).isEmpty()) {
+                continue;
+            }
+            double distance = from.distanceToSqr(living.position());
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = living;
+            }
+        }
+        return nearest;
+    }
+
+    /** Ends the flight against {@code target} and binds it as the anchor of this spear. */
+    private void stickInto(Entity target, Vec3 from, Vec3 reach) {
+        Vec3 stop = target.getBoundingBox().inflate(0.3D).clip(from, reach).orElse(reach);
+        // Rest against the body instead of sinking into it, so the anchor stays readable.
+        Vec3 direction = from.subtract(stop);
+        if (direction.lengthSqr() > 1.0E-6D) {
+            stop = stop.add(direction.normalize().scale(0.1D));
+        }
+        setPos(stop);
+        setDeltaMovement(Vec3.ZERO);
+        this.anchoredEntity = target.getUUID();
+        // Remember where on the body the spear sits, so it can ride along without drifting.
+        this.stickOffset = stop.subtract(target.position());
+        // The client rides the creature itself, so it needs the id and offset, not a UUID it would
+        // have to resolve against a level it may not have loaded yet.
+        publishHost(target.getId(), this.stickOffset);
+        anchor();
+    }
+
+    /**
+     * Synced id of the creature the spear is stuck in, {@code -1} when it is anchored to the world.
+     * Read by {@code DreamSpearFollowMixin} to ride the body on the client.
+     */
+    public int hostId() {
+        return this.entityData.get(DATA_HOST_ID);
+    }
+
+    /** Synced offset the spear sits at on the host body. */
+    public Vec3 hostOffset() {
+        return new Vec3(this.entityData.get(DATA_OFFSET_X), this.entityData.get(DATA_OFFSET_Y),
+                this.entityData.get(DATA_OFFSET_Z));
+    }
+
+    /**
+     * Moves an entity-bound spear along with the creature it is stuck in.
+     *
+     * <p>An anchor in the world stays where it was placed, but an anchor in a creature is a rider:
+     * the spear keeps the offset it landed with and follows the body. If the creature is gone, the
+     * spear turns into a plain block anchor at its last position instead of hanging on a dead UUID.
+     * </p>
+     */
+    private void followAnchoredEntity() {
+        if (this.anchoredEntity == null) {
+            return;
+        }
+        Entity anchor = level() instanceof ServerLevel serverLevel
+                ? serverLevel.getEntity(this.anchoredEntity)
+                : null;
+        if (anchor == null || !anchor.isAlive()) {
+            this.anchoredEntity = null;
+            this.stickOffset = null;
+            this.entityData.set(DATA_HOST_ID, -1);
+            // Keep anchoring, but now to the ground the spear last rested against.
+            syncAnchorToOwner(this.owner, true);
+            return;
+        }
+        Vec3 offset = this.stickOffset == null ? Vec3.ZERO : this.stickOffset;
+        this.stickOffset = offset;
+        // Keep the synced copy current: after a reload the client only learns the host from here.
+        publishHost(anchor.getId(), offset);
+        setPos(anchor.position().add(offset));
+    }
+
+    /** Publishes the ridden creature and the offset the spear sits at, for the client to follow. */
+    private void publishHost(int hostId, Vec3 offset) {
+        if (this.entityData.get(DATA_HOST_ID) != hostId) {
+            this.entityData.set(DATA_HOST_ID, hostId);
+        }
+        if (this.entityData.get(DATA_OFFSET_X) != (float) offset.x) {
+            this.entityData.set(DATA_OFFSET_X, (float) offset.x);
+        }
+        if (this.entityData.get(DATA_OFFSET_Y) != (float) offset.y) {
+            this.entityData.set(DATA_OFFSET_Y, (float) offset.y);
+        }
+        if (this.entityData.get(DATA_OFFSET_Z) != (float) offset.z) {
+            this.entityData.set(DATA_OFFSET_Z, (float) offset.z);
+        }
+    }
+
+    /** Moves the forced chunk along with the spear when an anchored spear changes chunk. */
+    private void ensureForcedChunk() {
+        if (!(level() instanceof ServerLevel server)) {
+            return;
+        }
+        ChunkPos current = new ChunkPos(blockPosition());
+        if (this.chunkForced && current.equals(this.forcedChunk)) {
+            return;
+        }
+        if (this.chunkForced) {
+            releaseForcedChunk();
+        }
+        forceChunk(server, current);
+        this.forcedChunk = current;
+        this.chunkForced = true;
     }
 
     /**
@@ -381,31 +563,6 @@ public class DreamSpearEntity extends Entity implements ItemSupplier {
         }
     }
 
-    /**
-     * First living creature the spear overlaps, limited to the layer it was thrown on.
-     *
-     * <p>The two layers share one server world, so a dream spear would otherwise stick into a
-     * real-world mob that the dreamer cannot even see. That is one of the ways a thrown spear came
-     * to a stop at the thrower's feet.</p>
-     */
-    @Nullable
-    private Entity findEntityHit() {
-        AABB box = getBoundingBox().inflate(0.3D);
-        for (Entity entity : level().getEntities(this, box)) {
-            if (!(entity instanceof LivingEntity living) || !living.isAlive() || living.isSpectator()) {
-                continue;
-            }
-            if (this.owner != null && this.owner.equals(living.getUUID())) {
-                continue;
-            }
-            if (DreamEntities.isDreamOnly(living) != dreamSide()) {
-                continue;
-            }
-            return living;
-        }
-        return null;
-    }
-
     private void forceCurrentChunk() {
         if (level() instanceof ServerLevel server) {
             ChunkPos pos = new ChunkPos(blockPosition());
@@ -456,6 +613,10 @@ public class DreamSpearEntity extends Entity implements ItemSupplier {
         if (tag.hasUUID("AnchoredEntity")) {
             this.anchoredEntity = tag.getUUID("AnchoredEntity");
         }
+        if (tag.contains("StickX")) {
+            this.stickOffset = new Vec3(tag.getDouble("StickX"), tag.getDouble("StickY"),
+                    tag.getDouble("StickZ"));
+        }
         setDreamSide(tag.getBoolean("DreamSide"));
         if (tag.getBoolean("Anchored")) {
             // Goes through the setter so the synced flag, physics and forced chunk stay in step.
@@ -470,6 +631,11 @@ public class DreamSpearEntity extends Entity implements ItemSupplier {
         }
         if (this.anchoredEntity != null) {
             tag.putUUID("AnchoredEntity", this.anchoredEntity);
+        }
+        if (this.stickOffset != null) {
+            tag.putDouble("StickX", this.stickOffset.x);
+            tag.putDouble("StickY", this.stickOffset.y);
+            tag.putDouble("StickZ", this.stickOffset.z);
         }
         tag.putBoolean("DreamSide", dreamSide());
         tag.putBoolean("Anchored", isAnchored());

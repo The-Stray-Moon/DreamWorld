@@ -16,5 +16,6 @@
   "entity.dreamworld.dream_spear": "梦境合金矛",
   "effect.dreamworld.dream_walk": "梦游",
   "hud.dreamworld.leave_tunnel": "跳跃脱离",
+  "hud.dreamworld.reverse_tunnel": "疾跑翻转方向",
   "hud.dreamworld.destroy_anchor": "潜行右键销毁已有锚点"
 }

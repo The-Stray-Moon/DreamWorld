@@ -20,8 +20,8 @@ import net.neoforged.neoforge.client.event.RenderGuiEvent;
 /**
  * Hotbar hints of the dream world.
  *
- * <p>Two hints share the strip above the hotbar: leaving a graffiti tunnel while boating over one,
- * and the way to clear an anchor that blocks a second spear from being thrown.</p>
+ * <p>Three hints share the strip above the hotbar: reversing a graffiti tunnel and jumping out of
+ * it while boating over one, and the way to clear an anchor that blocks a second spear.</p>
  */
 @EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID, value = Dist.CLIENT)
 public final class DreamHud {
@@ -43,8 +43,9 @@ public final class DreamHud {
         if (player == null || minecraft.options.hideGui) {
             return;
         }
-        List<Component> hints = new ArrayList<>(2);
+        List<Component> hints = new ArrayList<>(3);
         if (isOnTunnel(player)) {
+            hints.add(Component.translatable("hud.dreamworld.reverse_tunnel"));
             hints.add(Component.translatable("hud.dreamworld.leave_tunnel"));
         }
         if (holdsSpear(player) && DreamClientState.isAnchorBound()) {

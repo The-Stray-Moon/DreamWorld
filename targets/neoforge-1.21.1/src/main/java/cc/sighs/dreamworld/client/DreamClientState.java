@@ -17,6 +17,8 @@ public final class DreamClientState {
             new net.minecraft.world.phys.Vec3(73.0D / 255.0D, 128.0D / 255.0D, 146.0D / 255.0D);
 
     private static volatile boolean dreaming;
+    /** Whether the server has told this client which layer it should show in this session. */
+    private static volatile boolean dreamStateKnown;
     private static volatile boolean anchorBound;
     private static volatile List<BlockPos> graffiti = List.of();
     private static volatile java.util.Set<java.util.UUID> dreamers = java.util.Set.of();
@@ -31,6 +33,17 @@ public final class DreamClientState {
 
     public static void setDreaming(boolean value) {
         dreaming = value;
+        dreamStateKnown = true;
+    }
+
+    /**
+     * {@return whether the server has already said which layer this client should show}
+     *
+     * <p>Until that packet arrives the client knows nothing about the dream, so it cannot simulate
+     * the body without simulating the wrong layer.</p>
+     */
+    public static boolean isDreamStateKnown() {
+        return dreamStateKnown;
     }
 
     public static List<BlockPos> graffiti() {
@@ -82,6 +95,7 @@ public final class DreamClientState {
      */
     public static void reset() {
         dreaming = false;
+        dreamStateKnown = false;
         anchorBound = false;
         graffiti = List.of();
         dreamers = java.util.Set.of();

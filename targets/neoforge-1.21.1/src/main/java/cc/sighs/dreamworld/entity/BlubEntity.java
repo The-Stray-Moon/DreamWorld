@@ -13,7 +13,9 @@ import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.goal.TemptGoal;
 import net.minecraft.world.entity.animal.Rabbit;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -43,6 +45,8 @@ public class BlubEntity extends Rabbit {
     private static final int REST_TIME_MIN = 20 * 10;
     /** Longest time spent lying down. */
     private static final int REST_TIME_MAX = 20 * 25;
+    /** Radius in which a player holding dream tea counts as tempting. */
+    private static final double TEMPT_RADIUS = 8.0D;
 
     private static final EntityDataAccessor<Boolean> DATA_RESTING =
             SynchedEntityData.defineId(BlubEntity.class, EntityDataSerializers.BOOLEAN);
@@ -84,6 +88,35 @@ public class BlubEntity extends Rabbit {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         super.defineSynchedData(builder);
         builder.define(DATA_RESTING, false);
+    }
+
+    /**
+     * Dream tea is the blub's wheat: holding it makes the blub follow the holder.
+     *
+     * <p>Registered ahead of the vanilla rabbit-food temptation, so tea wins while it is held, and
+     * ahead of the player-avoidance goal a rabbit normally has. Everything else the rabbit does -
+     * grazing, breeding, panicking - stays as it is.</p>
+     */
+    @Override
+    protected void registerGoals() {
+        super.registerGoals();
+        this.goalSelector.addGoal(2, new TemptGoal(this, 1.1D,
+                stack -> stack.is(DWRegistry.DREAM_TEA.get()), false));
+    }
+
+    /** {@return whether a player close enough to tempt it is holding dream tea} */
+    private boolean isTeaNearby() {
+        double reach = TEMPT_RADIUS * TEMPT_RADIUS;
+        for (Player player : level().players()) {
+            if (player.isSpectator() || player.distanceToSqr(this) > reach) {
+                continue;
+            }
+            if (player.getMainHandItem().is(DWRegistry.DREAM_TEA.get())
+                    || player.getOffhandItem().is(DWRegistry.DREAM_TEA.get())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** {@return whether the blub is currently lying down} */
@@ -146,7 +179,7 @@ public class BlubEntity extends Rabbit {
             // A resting blub still lays clay; only movement is off.
             holdStill();
             tickClay();
-            if (isResting() && --this.restTicks <= 0) {
+            if (isResting() && (isTeaNearby() || --this.restTicks <= 0)) {
                 setResting(false);
                 this.stillTicks = 0;
                 this.nextRestDelay = nextRestDelay();
@@ -254,7 +287,9 @@ public class BlubEntity extends Rabbit {
      * in the air never starts resting, because a skipped AI step also skips gravity.</p>
      */
     private void tickRest(boolean moved) {
-        if (moved || !onGround()) {
+        // A blub being tempted keeps standing: lying down mid-approach would stall the very goal the
+        // tea is supposed to drive.
+        if (moved || !onGround() || isTeaNearby()) {
             this.stillTicks = 0;
             return;
         }

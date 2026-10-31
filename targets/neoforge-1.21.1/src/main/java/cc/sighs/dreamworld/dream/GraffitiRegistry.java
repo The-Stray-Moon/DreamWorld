@@ -66,6 +66,27 @@ public final class GraffitiRegistry extends SavedData {
         return result;
     }
 
+    /**
+     * Distance in blocks to the nearest graffiti of {@code level}'s dimension.
+     *
+     * <p>Graffiti on the other layer share the coordinates of this one, so the same answer serves a
+     * dreamer and an awake player. Returns {@link Double#MAX_VALUE} when there is none.</p>
+     */
+    public double nearestDistance(ServerLevel level, BlockPos pos) {
+        String dimension = level.dimension().location().toString();
+        double nearest = Double.MAX_VALUE;
+        for (Entry entry : entries.values()) {
+            if (!entry.dimension().equals(dimension)) {
+                continue;
+            }
+            double distance = Math.sqrt(entry.pos().distSqr(pos));
+            if (distance < nearest) {
+                nearest = distance;
+            }
+        }
+        return nearest;
+    }
+
     public List<Entry> all() {
         return List.copyOf(entries.values());
     }

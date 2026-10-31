@@ -1,6 +1,7 @@
 package cc.sighs.dreamworld.mixin;
 
 import cc.sighs.dreamworld.boat.DreamBoatGate;
+import cc.sighs.dreamworld.boat.DreamTunnelBoat;
 import cc.sighs.dreamworld.boat.TunnelGeometry;
 import cc.sighs.dreamworld.client.DreamClientState;
 import cc.sighs.dreamworld.dream.DreamEntities;
@@ -54,7 +55,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * its axis. The line fixes the direction; the pacing stays in the player's hands.</p>
  */
 @Mixin(Boat.class)
-public abstract class BoatDreamMixin {
+public abstract class BoatDreamMixin implements DreamTunnelBoat {
     /**
      * Ground friction on the dream layer.
      *
@@ -147,6 +148,10 @@ public abstract class BoatDreamMixin {
     private float deltaRotation;
     @Shadow
     private boolean inputDown;
+    @Shadow
+    private Boat.Status status;
+    @Shadow
+    private Boat.Status oldStatus;
 
     @Unique
     private int dreamworld$assistTicks;
@@ -199,6 +204,31 @@ public abstract class BoatDreamMixin {
             return;
         }
         cir.setReturnValue(Math.max(friction, DREAM_FRICTION));
+    }
+
+    /**
+     * Lets a falling dream boat land on water instead of diving through it.
+     *
+     * <p>Vanilla stops a boat at the surface with its own entry snap, and that snap only runs when
+     * the previous status was {@code IN_AIR}. The dream friction above overrides
+     * {@code getGroundFriction} to report ground everywhere, so a dream boat is never {@code IN_AIR} -
+     * the snap is skipped, the boat keeps its fall speed and drives straight to the bottom, where the
+     * water at its hull bottom is the pond floor and buoyancy never gets a chance. Repeating the
+     * vertical part of the snap here is enough to make it float.</p>
+     */
+    @Inject(method = "floatBoat", at = @At("HEAD"))
+    private void dreamworld$floatOnEntry(CallbackInfo ci) {
+        Boat boat = (Boat) (Object) this;
+        if (this.status != Boat.Status.IN_WATER || this.oldStatus == Boat.Status.IN_WATER) {
+            return;
+        }
+        if (!dreamworld$isDreamRider(boat.getControllingPassenger())) {
+            return;
+        }
+        Vec3 velocity = boat.getDeltaMovement();
+        if (velocity.y < 0.0D) {
+            boat.setDeltaMovement(velocity.x, 0.0D, velocity.z);
+        }
     }
 
     @Inject(method = "floatBoat", at = @At("TAIL"))
@@ -339,8 +369,7 @@ public abstract class BoatDreamMixin {
                 dreamworld$holdTunnel(boat);
                 return;
             }
-        }
-        if (jumpPressed && dreamworld$jumpCooldown == 0 && (boat.onGround() || boat.isInWater())) {
+        }        if (jumpPressed && dreamworld$jumpCooldown == 0 && (boat.onGround() || boat.isInWater())) {
             Vec3 delta = boat.getDeltaMovement();
             boat.setDeltaMovement(delta.x, DREAM_JUMP_POWER, delta.z);
             dreamworld$jumpCooldown = DREAM_JUMP_COOLDOWN;
@@ -661,6 +690,48 @@ public abstract class BoatDreamMixin {
         boat.setDeltaMovement(dreamworld$tunnelDir.scale(along));
         Vec3 next = dreamworld$tunnelStart.add(dreamworld$tunnelDir.scale(dreamworld$tunnelProgress));
         boat.setPos(next.x, next.y, next.z);
+    }
+
+    /**
+     * Turns the boat around inside a tunnel.
+     *
+     * <p>The tunnel is a line between two graffiti, so reversing folds it onto its other end instead
+     * of rebasing it at the boat: the boat becomes the far end, the direction is negated and the
+     * progress is mirrored. Rebasing would keep only the distance travelled since the last flip, and
+     * three quick presses would shrink the line to nothing - which ends the ride on the spot and
+     * drops the boat out of the tunnel.</p>
+     *
+     * <p>The rider's view is turned too. A tunnel cancels {@code clampRotation} so the player can
+     * look around freely, which also means nothing else would follow the boat around - without this
+     * the bow turns while the player keeps staring at the wall they just left.</p>
+     */
+    @Override
+    public void reverseDreamTunnel() {
+        Boat boat = (Boat) (Object) this;
+        if (!dreamworld$inTunnel) {
+            return;
+        }
+        Vec3 farEnd = dreamworld$tunnelStart.add(dreamworld$tunnelDir.scale(dreamworld$tunnelLength));
+        dreamworld$tunnelStart = farEnd;
+        dreamworld$tunnelProgress = dreamworld$tunnelLength - dreamworld$tunnelProgress;
+        dreamworld$tunnelDir = dreamworld$tunnelDir.reverse();
+        boat.setDeltaMovement(Vec3.ZERO);
+        float yaw = dreamworld$yawOf(dreamworld$tunnelDir);
+        boat.setYRot(yaw);
+        LivingEntity rider = boat.getControllingPassenger();
+        if (rider != null) {
+            rider.setYRot(yaw);
+            // Snap the interpolation origin as well, or the view swings back to the old heading.
+            rider.yRotO = yaw;
+            rider.setYHeadRot(yaw);
+            rider.setYBodyRot(yaw);
+            boat.positionRider(rider);
+        }
+    }
+
+    @Override
+    public boolean inDreamTunnel() {
+        return dreamworld$inTunnel;
     }
 
     /**

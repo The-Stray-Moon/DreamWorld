@@ -2,6 +2,7 @@ package cc.sighs.dreamworld.item;
 
 import java.util.ArrayList;
 import java.util.List;
+import cc.sighs.dreamworld.dream.DreamEntities;
 import cc.sighs.dreamworld.dream.DreamIntrusion;
 import cc.sighs.dreamworld.dream.DreamManager;
 import cc.sighs.dreamworld.net.DWPayloads;
@@ -15,6 +16,8 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -23,6 +26,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -32,9 +36,10 @@ import net.neoforged.neoforge.network.PacketDistributor;
  *
  * <p>The item is charged by holding the use button; releasing it raycasts along the player's look
  * vector and blasts the first block hit (or the end of the ray). The longer the charge, the bigger
- * the radius (1 to 4). The blast never damages anything living: it only plays the vanilla explosion
- * sound and particles, and the blocks inside the radius are handed over to the dream intrusion
- * instead of being destroyed by an explosion, so no loot and no experience are spawned.</p>
+ * the radius (1 to 4) and the harder the hit. The blast damages creatures on the layer it happened
+ * on - never through the mirror - and the blocks inside the radius are handed over to the dream
+ * intrusion instead of being destroyed by an explosion, so no loot and no experience are spawned.
+ * A lethal blast carries its victim across the mirror exactly like a sword kill.</p>
  */
 public class DreamWandItem extends Item {
     /** Ticks of charging needed for the maximum radius. */
@@ -48,6 +53,11 @@ public class DreamWandItem extends Item {
     private static final int PETALS_PER_RADIUS = 12;
     /** How far past the blast the petal packet is sent, in blocks. */
     private static final double PARTICLE_RANGE = 32.0D;
+    /** Damage at the edge of a fully charged blast and of a minimum one. */
+    private static final float MIN_DAMAGE = 6.0F;
+    private static final float MAX_DAMAGE = 18.0F;
+    /** Weakest damage factor at the outer edge of the blast. */
+    private static final double MIN_FALLOFF = 0.25D;
 
     public DreamWandItem(Item.Properties properties) {
         super(properties);
@@ -97,6 +107,7 @@ public class DreamWandItem extends Item {
         Vec3 target = hit.getLocation();
 
         playBlastEffects(serverLevel, target, radius);
+        damageCreatures(player, serverLevel, target, radius, progress);
 
         int reach = Mth.ceil(radius);
         BlockPos center = BlockPos.containing(target);
@@ -114,8 +125,37 @@ public class DreamWandItem extends Item {
     }
 
     /**
-     * Plays the sound and the particles of a vanilla blast without creating an explosion: no entity
-     * is ever hurt and no block is destroyed by the effect itself.
+     * Damages the creatures caught in the blast, on the layer the blast happened on.
+     *
+     * <p>The two layers share one server world, so a dream blast would otherwise also wound the real
+     * creatures standing at the same coordinates - creatures the dreamer cannot even see. Only
+     * creatures belonging to the caster's layer are hit, which is also what keeps the intrusion that
+     * follows a kill on the right side of the mirror.</p>
+     *
+     * <p>The damage is an explosion caused by the player, so it flows through the normal hit event
+     * and a lethal blast is turned into a dream intrusion like a sword kill.</p>
+     */
+    private static void damageCreatures(ServerPlayer player, ServerLevel level, Vec3 center,
+            float radius, float chargeProgress) {
+        boolean dreamSide = DreamManager.isDreaming(player);
+        float base = Mth.lerp(chargeProgress, MIN_DAMAGE, MAX_DAMAGE);
+        DamageSource source = level.damageSources().explosion(player, player);
+        for (Entity entity : level.getEntities(player, new AABB(center, center).inflate(radius))) {
+            if (!(entity instanceof LivingEntity living) || !living.isAlive()) {
+                continue;
+            }
+            if (DreamEntities.isDreamOnly(living) != dreamSide) {
+                continue;
+            }
+            double distance = Math.sqrt(living.getBoundingBox().getCenter().distanceToSqr(center));
+            float falloff = (float) Mth.clamp(1.0D - distance / (radius + 1.0D), MIN_FALLOFF, 1.0D);
+            living.hurt(source, base * falloff);
+        }
+    }
+
+    /**
+     * Plays the sound and the particles of a vanilla blast without creating an explosion: the blocks
+     * are handed to the intrusion instead of being destroyed, so no loot and no experience spawn.
      *
      * <p>The blast is finished with a burst of cherry petals that flies outwards from the centre.
      * Vanilla's particle packet cannot express that - it gives every particle a random velocity

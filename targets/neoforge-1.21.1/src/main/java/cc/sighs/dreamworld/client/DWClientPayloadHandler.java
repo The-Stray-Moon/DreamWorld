@@ -27,6 +27,7 @@ public final class DWClientPayloadHandler {
 
     public static void handleDreamState(DWPayloads.DreamStatePayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
+            boolean previous = DreamClientState.isDreaming();
             if (payload.dreaming()) {
                 DreamClientState.setDreaming(true);
                 DreamClientPatches.applyAll();
@@ -37,6 +38,11 @@ public final class DWClientPayloadHandler {
             // The dream tint is baked into block faces, so the chunk meshes must be rebuilt on
             // every transition: pink going in, original colours coming out.
             rebuildBlockMeshes();
+            // Both directions get the same blink; only a real change earns one, so the state the
+            // server re-sends on login does not blink the screen for nothing.
+            if (previous != payload.dreaming()) {
+                DreamBlink.trigger();
+            }
         });
     }
 

@@ -48,6 +48,11 @@ public final class DreamSleepEvents {
      */
     private static final int DREAM_ENTRY_DELAY = 60;
 
+    /** Distance in blocks at which dream graffiti start to speed up falling asleep. */
+    private static final double GRAFFITI_SLEEP_RANGE = 16.0D;
+    /** Largest share of the sleep delay graffiti may remove, at zero distance. */
+    private static final float MAX_GRAFFITI_SPEEDUP = 0.60F;
+
     /** Sleepers on their way out of the dream, keyed by player UUID, value = ticks slept. */
     private static final int DREAM_EXIT_DELAY = 60;
 
@@ -64,6 +69,31 @@ public final class DreamSleepEvents {
     private static boolean internalWake;
 
     private DreamSleepEvents() {
+    }
+
+    /**
+     * Ticks this sleeper still needs before the dream starts or ends.
+     *
+     * <p>Dream graffiti draw the sleeper in: from sixteen blocks away the delay already shrinks in
+     * proportion to the distance, and standing right at one removes sixty percent of it. Both
+     * directions use this - leaving the dream is a sleep of its own, just with the mirror on the
+     * other side. The delay never reaches zero: even on the graffiti the player has to lie still for
+     * a moment, and the result stays well below the vanilla hundred tick deep-sleep threshold, so
+     * entering the dream can never turn into a "everybody slept" night skip.</p>
+     *
+     * @param fallback the delay on that direction used when no graffiti is near
+     */
+    private static int sleepDelay(ServerPlayer player, int fallback) {
+        if (!(player.level() instanceof ServerLevel level)) {
+            return fallback;
+        }
+        double nearest = GraffitiRegistry.get(level).nearestDistance(level, player.blockPosition());
+        if (nearest >= GRAFFITI_SLEEP_RANGE) {
+            return fallback;
+        }
+        float closeness = (float) (1.0D - nearest / GRAFFITI_SLEEP_RANGE);
+        float factor = 1.0F - MAX_GRAFFITI_SPEEDUP * closeness;
+        return Math.max(1, Math.round(fallback * factor));
     }
 
     // ------------------------------------------------------- falling asleep
@@ -160,7 +190,7 @@ public final class DreamSleepEvents {
                     continue;
                 }
                 int slept = entry.getValue() + 1;
-                if (slept < DREAM_ENTRY_DELAY) {
+                if (slept < sleepDelay(player, DREAM_ENTRY_DELAY)) {
                     entry.setValue(slept);
                     continue;
                 }
@@ -178,7 +208,7 @@ public final class DreamSleepEvents {
                     continue;
                 }
                 int slept = entry.getValue() + 1;
-                if (slept < DREAM_EXIT_DELAY) {
+                if (slept < sleepDelay(player, DREAM_EXIT_DELAY)) {
                     entry.setValue(slept);
                     continue;
                 }
@@ -317,6 +347,9 @@ public final class DreamSleepEvents {
             return;
         }
         DreamManager.pushAnchorState(player);
+        // Always, dreaming or not: the client keeps the body frozen until it is told which layer it
+        // is on, so a non-dreamer has to be told "awake" as well or it would stay stuck.
+        DreamManager.pushDreamState(player);
         if (player.getServer() != null) {
             // Keep every client's list of dreaming bodies in step with the session.
             DreamManager.broadcastDreamers(player.getServer());

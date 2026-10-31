@@ -44,7 +44,7 @@ public final class DreamBlockTint {
     private static final float HUE_JITTER = 0.020F;
     /** Per-type saturation multiplier spread. */
     private static final float MIN_SATURATION_SCALE = 0.75F;
-    private static final float MAX_SATURATION_SCALE = 1.02F;
+    private static final float MAX_SATURATION_SCALE = 0.92F;
     /** Per-type brightness multiplier spread. The top end pushes the colour towards white. */
     private static final float MIN_BRIGHTNESS_SCALE = 1.00F;
     private static final float MAX_BRIGHTNESS_SCALE = 1.55F;
