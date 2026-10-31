@@ -36,6 +36,14 @@ import cc.sighs.dreamworld.net.DWPayloads;
  */
 public final class DreamEntities {
     private static final String DREAM_ONLY = "DreamWorldDreamEntity";
+    /**
+     * Marks a dream copy that has to lie down.
+     *
+     * <p>The pose itself is not part of the entity save data, so without this flag a reloaded dream
+     * creature would come back standing. The rabbit is dream-only too but stays upright, which is why
+     * the sleeping state is tracked separately.</p>
+     */
+    private static final String DREAM_SLEEPING = "DreamWorldSleepingCopy";
     /** Entity IDs already sent to a player, per player UUID. */
     private static final Map<UUID, Set<Integer>> SENT = new HashMap<>();
     private static final double VIEW_DISTANCE_SQR = 64.0D * 64.0D;
@@ -66,7 +74,28 @@ public final class DreamEntities {
         if (dreamOnly) {
             entity.getPersistentData().putBoolean(DREAM_ONLY, true);
         } else {
+            // Leaving the layer also drops the sleeping mark, so a creature that came back to reality
+            // is never laid down again after a reload.
             entity.getPersistentData().remove(DREAM_ONLY);
+            entity.getPersistentData().remove(DREAM_SLEEPING);
+        }
+    }
+
+    /**
+     * Re-applies the sleeping pose to a dream copy that has just (re)entered the level.
+     *
+     * <p>The pose is not part of the entity save data, so without this a reloaded intruded creature
+     * would stand up again. Only copies marked at intrusion time are affected - the rabbit is
+     * dream-only as well and stays upright.</p>
+     */
+    public static void restoreSleepingPose(Entity entity) {
+        if (!isDreamOnly(entity) || !entity.getPersistentData().getBoolean(DREAM_SLEEPING)) {
+            return;
+        }
+        entity.setPose(Pose.SLEEPING);
+        if (entity instanceof Mob mob) {
+            mob.setNoAi(true);
+            mob.setPersistenceRequired();
         }
     }
 
@@ -102,6 +131,7 @@ public final class DreamEntities {
         copy.setDeltaMovement(Vec3.ZERO);
         if (dreamOnly) {
             copy.setPose(Pose.SLEEPING);
+            copy.getPersistentData().putBoolean(DREAM_SLEEPING, true);
             if (copy instanceof Mob mob) {
                 mob.setNoAi(true);
                 mob.setPersistenceRequired();

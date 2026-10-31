@@ -13,14 +13,15 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 /**
- * Keeps dream rabbits around dreaming players.
+ * Server-side lifecycle of the dream layer's creatures.
  *
- * <p>The dream layer has no wildlife: only the blue rabbit exists there. The rabbits are real
- * server-side entities shared by every dreaming player of a level, and they lay dream clay. Without
- * a single dreamer in a level they are dropped, so nothing keeps wandering through the real world.</p>
+ * <p>The dream layer has no wildlife: only the blue rabbit exists there, spawned around dreaming
+ * players and dropped again once nobody dreams. Intruded creatures also live here, and this class is
+ * what puts them back to sleep after a reload, since the sleeping pose is not part of the save data.</p>
  */
 @EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID)
 public final class DreamMobs {
@@ -32,6 +33,19 @@ public final class DreamMobs {
     private static final int RABBIT_RADIUS = 32;
 
     private DreamMobs() {
+    }
+
+    /**
+     * Puts a dream copy back to sleep when it (re)enters the level.
+     *
+     * <p>Entity poses are not saved, so a reloaded intruded creature would otherwise come back
+     * standing. A freshly created copy is already posed; this only matters for loaded chunks.</p>
+     */
+    @SubscribeEvent
+    public static void onEntityJoin(EntityJoinLevelEvent event) {
+        if (!event.getLevel().isClientSide()) {
+            DreamEntities.restoreSleepingPose(event.getEntity());
+        }
     }
 
     @SubscribeEvent
