@@ -1,6 +1,8 @@
 package cc.sighs.dreamworld.net;
 
 import cc.sighs.dreamworld.DreamWorldNeoForge121;
+import cc.sighs.dreamworld.boat.DreamTunnelBoat;
+import cc.sighs.dreamworld.boat.TunnelGeometry;
 import cc.sighs.dreamworld.client.DWClientPayloadHandler;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,16 +14,18 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.vehicle.Boat;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.DirectionalPayloadHandler;
+import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 /**
- * Client-bound payloads of the mod: the per-player dream flag, the graffiti coordinate list and the
- * dream patch set of a chunk.
+ * Network payloads of the mod: the dream flag, the graffiti list and tunnel limit, the dream patch
+ * set of a chunk, the dreamer list, and the request to attach a boat to a tunnel.
  */
 @EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID)
 public final class DWPayloads {
@@ -42,13 +46,19 @@ public final class DWPayloads {
         }
     }
 
-    /** Full list of graffiti coordinates the client needs to render tunnels. */
-    public record GraffitiListPayload(List<BlockPos> positions) implements CustomPacketPayload {
+    /**
+     * Full list of graffiti coordinates the client needs to render tunnels, plus the server's limit
+     * of tunnels per graffiti so both sides link exactly the same pairs.
+     */
+    public record GraffitiListPayload(List<BlockPos> positions, int maxTunnelsPerGraffiti)
+            implements CustomPacketPayload {
         public static final Type<GraffitiListPayload> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath(DreamWorldNeoForge121.MOD_ID, "graffiti_list"));
         public static final StreamCodec<RegistryFriendlyByteBuf, GraffitiListPayload> STREAM_CODEC =
                 StreamCodec.composite(BlockPos.STREAM_CODEC.apply(ByteBufCodecs.list()),
-                        GraffitiListPayload::positions, GraffitiListPayload::new);
+                        GraffitiListPayload::positions,
+                        ByteBufCodecs.VAR_INT, GraffitiListPayload::maxTunnelsPerGraffiti,
+                        GraffitiListPayload::new);
 
         @Override
         public Type<GraffitiListPayload> type() {
@@ -196,9 +206,25 @@ public final class DWPayloads {
         }
     }
 
+    /** Asks the server to attach the sender's boat to the named tunnel. */
+    public record TunnelAttachPayload(BlockPos from, BlockPos to) implements CustomPacketPayload {
+        public static final Type<TunnelAttachPayload> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath(DreamWorldNeoForge121.MOD_ID, "tunnel_attach"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, TunnelAttachPayload> STREAM_CODEC =
+                StreamCodec.composite(BlockPos.STREAM_CODEC, TunnelAttachPayload::from,
+                        BlockPos.STREAM_CODEC, TunnelAttachPayload::to, TunnelAttachPayload::new);
+
+        @Override
+        public Type<TunnelAttachPayload> type() {
+            return TYPE;
+        }
+    }
+
     @SubscribeEvent
     public static void register(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
+        registrar.playToServer(TunnelAttachPayload.TYPE, TunnelAttachPayload.STREAM_CODEC,
+                DWPayloads::handleTunnelAttach);
         registrar.playToClient(DreamStatePayload.TYPE, DreamStatePayload.STREAM_CODEC,
                 new DirectionalPayloadHandler<>(DWClientPayloadHandler::handleDreamState,
                         (payload, context) -> {
@@ -231,5 +257,24 @@ public final class DWPayloads {
                 new DirectionalPayloadHandler<>(DWClientPayloadHandler::handleDreamPatch,
                         (payload, context) -> {
                         }));
+    }
+
+    /**
+     * Attaches the sender's boat to the tunnel it is parked next to.
+     *
+     * <p>The decision is the server's: the boat only attaches when the sender still rides it, is
+     * dreaming, and is close enough to a tunnel. The client sends the request and nothing else.</p>
+     */
+    public static void handleTunnelAttach(TunnelAttachPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (!(context.player() instanceof ServerPlayer player)) {
+                return;
+            }
+            if (player.getVehicle() instanceof Boat boat
+                    && boat instanceof DreamTunnelBoat tunnelBoat) {
+                tunnelBoat.attachDreamTunnel(
+                        new TunnelGeometry.Pair(payload.from(), payload.to()));
+            }
+        });
     }
 }

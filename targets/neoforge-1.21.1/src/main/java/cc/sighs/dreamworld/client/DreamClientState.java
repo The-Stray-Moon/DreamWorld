@@ -21,6 +21,7 @@ public final class DreamClientState {
     private static volatile boolean dreamStateKnown;
     private static volatile boolean anchorBound;
     private static volatile List<BlockPos> graffiti = List.of();
+    private static volatile int maxTunnelsPerGraffiti = 5;
     private static volatile java.util.Set<java.util.UUID> dreamers = java.util.Set.of();
     private static volatile java.util.Set<Integer> dreamEntityIds = java.util.Set.of();
 
@@ -50,8 +51,14 @@ public final class DreamClientState {
         return graffiti;
     }
 
-    public static void setGraffiti(List<BlockPos> positions) {
+    /** {@return how many tunnels one graffiti may form, mirrored from the server config} */
+    public static int maxTunnelsPerGraffiti() {
+        return maxTunnelsPerGraffiti;
+    }
+
+    public static void setGraffiti(List<BlockPos> positions, int maxTunnels) {
         graffiti = List.copyOf(positions);
+        maxTunnelsPerGraffiti = maxTunnels;
     }
 
     public static java.util.Set<Integer> dreamEntityIds() {
@@ -98,6 +105,7 @@ public final class DreamClientState {
         dreamStateKnown = false;
         anchorBound = false;
         graffiti = List.of();
+        maxTunnelsPerGraffiti = 5;
         dreamers = java.util.Set.of();
         dreamEntityIds = java.util.Set.of();
     }

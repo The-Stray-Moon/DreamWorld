@@ -2,12 +2,16 @@ package cc.sighs.dreamworld.client;
 
 import cc.sighs.dreamworld.DWRegistry;
 import cc.sighs.dreamworld.DreamWorldNeoForge121;
+import cc.sighs.dreamworld.boat.DreamTunnelBoat;
+import cc.sighs.dreamworld.boat.TunnelGeometry;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.item.ItemStack;
@@ -20,13 +24,16 @@ import net.neoforged.neoforge.client.event.RenderGuiEvent;
 /**
  * Hotbar hints of the dream world.
  *
- * <p>Three hints share the strip above the hotbar: reversing a graffiti tunnel and jumping out of
- * it while boating over one, and the way to clear an anchor that blocks a second spear.</p>
+ * <p>The strip above the hotbar carries reversing and leaving a graffiti tunnel, what the crosshair
+ * is pointing at when it points at one, and the way to clear an anchor that blocks a second spear.
+ * Hints are stacked upwards, the last list entry closest to the hotbar.</p>
  */
 @EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID, value = Dist.CLIENT)
 public final class DreamHud {
-    /** Distance in blocks at which a boat counts as sitting on a tunnel. */
-    private static final double TUNNEL_HINT_RANGE = 3.0D;
+    /** How far the crosshair reaches when looking for a tunnel to point at. */
+    private static final double TUNNEL_AIM_REACH = DreamVisuals.AIM_REACH;
+    /** How far off the line the crosshair may be and still count as pointing at a tunnel. */
+    private static final double TUNNEL_AIM_RADIUS = DreamVisuals.AIM_RADIUS;
     /** Height of the hotbar texture, from the bottom of the screen. */
     private static final int HOTBAR_HEIGHT = 22;
     /** Vertical step between two stacked hints. */
@@ -44,9 +51,14 @@ public final class DreamHud {
             return;
         }
         List<Component> hints = new ArrayList<>(3);
-        if (isOnTunnel(player)) {
+        boolean onTunnel = isOnTunnel(player);
+        if (onTunnel) {
             hints.add(Component.translatable("hud.dreamworld.reverse_tunnel"));
             hints.add(Component.translatable("hud.dreamworld.leave_tunnel"));
+        }
+        Component aimHint = aimHint(player);
+        if (aimHint != null) {
+            hints.add(aimHint);
         }
         if (holdsSpear(player) && DreamClientState.isAnchorBound()) {
             hints.add(Component.translatable("hud.dreamworld.destroy_anchor"));
@@ -65,16 +77,71 @@ public final class DreamHud {
         }
     }
 
-    /** {@return whether the player is boating over a graffiti tunnel} */
-    private static boolean isOnTunnel(Player player) {
+    /**
+     * The hint for a tunnel under the crosshair.
+     *
+     * <p>The crosshair has to actually point at a tunnel segment; then the hint says what is missing:
+     * the boat, the distance, or nothing at all. Blocks in between do not matter - a tunnel runs
+     * through terrain, so aiming through a wall is the normal case.</p>
+     *
+     * @return the hint, or {@code null} when the crosshair is on no usable tunnel
+     */
+    private static Component aimHint(Player player) {
+        if (!DreamClientState.isDreaming() || DreamVisuals.tunnels().isEmpty()) {
+            return null;
+        }
+        Vec3 eye = player.getEyePosition(1.0F);
+        Vec3 direction = player.getViewVector(1.0F);
+        DreamVisuals.AimedTunnel aimed = DreamVisuals.aimedTunnel(eye, direction, TUNNEL_AIM_REACH,
+                TUNNEL_AIM_RADIUS);
+        if (aimed == null) {
+            return null;
+        }
         if (!(player.getVehicle() instanceof Boat boat)) {
+            return Component.translatable("hud.dreamworld.tunnel_need_boat");
+        }
+        if (boat instanceof DreamTunnelBoat tunnelBoat && isRiding(tunnelBoat, aimed.tunnel())) {
+            // Pointing at the line under the hull: nothing to switch to.
+            return null;
+        }
+        Vec3 from = Vec3.atCenterOf(aimed.tunnel().from());
+        Vec3 to = Vec3.atCenterOf(aimed.tunnel().to());
+        if (distanceToSegment(boat.position(), from, to) > reach(player)) {
+            return Component.translatable("hud.dreamworld.tunnel_too_far");
+        }
+        return Component.translatable("hud.dreamworld.tunnel_enter");
+    }
+
+    /** {@return how far the player can reach a tunnel: interaction range plus one block} */
+    private static double reach(Player player) {
+        return player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE) + 1.0D;
+    }
+
+    /** {@return whether the boat already rides the tunnel under the crosshair} */
+    private static boolean isRiding(DreamTunnelBoat tunnelBoat, DreamVisuals.TunnelEdge aimed) {
+        TunnelGeometry.Pair riding = tunnelBoat.currentDreamTunnel();
+        if (riding == null) {
             return false;
         }
-        if (DreamVisuals.tunnels().isEmpty()) {
-            return false;
+        boolean same = riding.from().equals(aimed.from()) && riding.to().equals(aimed.to());
+        boolean flipped = riding.from().equals(aimed.to()) && riding.to().equals(aimed.from());
+        return same || flipped;
+    }
+
+    /** Distance from a point to a segment; the boat may sit anywhere along one. */
+    private static double distanceToSegment(Vec3 point, Vec3 start, Vec3 end) {
+        Vec3 segment = end.subtract(start);
+        double lengthSqr = segment.lengthSqr();
+        if (lengthSqr < 1.0E-6D) {
+            return point.distanceTo(start);
         }
-        Vec3 position = boat.position();
-        return DreamVisuals.isNearTunnel(position, TUNNEL_HINT_RANGE);
+        double t = Mth.clamp(point.subtract(start).dot(segment) / lengthSqr, 0.0D, 1.0D);
+        return point.distanceTo(start.add(segment.scale(t)));
+    }
+
+    /** {@return whether the boat is actually riding a tunnel} */
+    private static boolean isOnTunnel(Player player) {
+        return player.getVehicle() instanceof DreamTunnelBoat tunnelBoat && tunnelBoat.inDreamTunnel();
     }
 
     /** {@return whether a dream alloy spear is held in either hand} */

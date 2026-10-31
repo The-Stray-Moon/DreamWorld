@@ -1,6 +1,7 @@
 package cc.sighs.dreamworld.dream;
 
 import cc.sighs.dreamworld.DreamWorldNeoForge121;
+import cc.sighs.dreamworld.config.DreamServerConfig;
 import cc.sighs.dreamworld.net.DWPayloads;
 import java.util.List;
 import net.minecraft.core.BlockPos;
@@ -30,13 +31,15 @@ public final class GraffitiSync {
 
     /** Sends the list of {@code level} to every connected player. */
     public static void broadcast(ServerLevel level) {
-        PacketDistributor.sendToAllPlayers(new DWPayloads.GraffitiListPayload(positionsIn(level)));
+        PacketDistributor.sendToAllPlayers(new DWPayloads.GraffitiListPayload(positionsIn(level),
+                DreamServerConfig.maxTunnelsPerGraffiti()));
     }
 
     /** Sends the list of the dimension the player is in right now. */
     public static void sync(ServerPlayer player) {
         if (player.level() instanceof ServerLevel level) {
-            PacketDistributor.sendToPlayer(player, new DWPayloads.GraffitiListPayload(positionsIn(level)));
+            PacketDistributor.sendToPlayer(player, new DWPayloads.GraffitiListPayload(
+                    positionsIn(level), DreamServerConfig.maxTunnelsPerGraffiti()));
         }
     }
 

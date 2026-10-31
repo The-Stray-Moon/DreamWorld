@@ -17,5 +17,8 @@
   "effect.dreamworld.dream_walk": "梦游",
   "hud.dreamworld.leave_tunnel": "跳跃脱离",
   "hud.dreamworld.reverse_tunnel": "疾跑翻转方向",
-  "hud.dreamworld.destroy_anchor": "潜行右键销毁已有锚点"
+  "hud.dreamworld.destroy_anchor": "潜行右键销毁已有锚点",
+  "hud.dreamworld.tunnel_need_boat": "不在船上",
+  "hud.dreamworld.tunnel_too_far": "距离不够",
+  "hud.dreamworld.tunnel_enter": "交互进入梦境甬道"
 }

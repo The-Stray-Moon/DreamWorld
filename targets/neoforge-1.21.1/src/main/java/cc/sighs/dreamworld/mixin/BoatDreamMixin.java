@@ -4,6 +4,7 @@ import cc.sighs.dreamworld.boat.DreamBoatGate;
 import cc.sighs.dreamworld.boat.DreamTunnelBoat;
 import cc.sighs.dreamworld.boat.TunnelGeometry;
 import cc.sighs.dreamworld.client.DreamClientState;
+import cc.sighs.dreamworld.config.DreamServerConfig;
 import cc.sighs.dreamworld.dream.DreamEntities;
 import cc.sighs.dreamworld.dream.DreamManager;
 import cc.sighs.dreamworld.dream.GraffitiRegistry;
@@ -20,6 +21,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.Boat;
@@ -133,14 +135,8 @@ public abstract class BoatDreamMixin implements DreamTunnelBoat {
     private static final double DREAM_JUMP_POWER = 0.5D;
     /** Cooldown between two jumps, in ticks. */
     private static final int DREAM_JUMP_COOLDOWN = 8;
-    /** Distance at which a moving boat locks onto a graffiti tunnel. */
-    private static final double TUNNEL_ATTACH_RADIUS = 4.0D;
     /** Distance the boat is pushed away from a tunnel when it leaves one. */
     private static final double TUNNEL_ESCAPE_DISTANCE = 6.0D;
-    /** Ticks during which a boat cannot lock onto a tunnel again after leaving one. */
-    private static final int TUNNEL_REATTACH_DELAY = 40;
-    /** Same budget as the client renderer, keeps the boat on a tunnel that is actually drawn. */
-    private static final int TUNNEL_MAX_PAIRS = 64;
     /** How deep the boat looks for a place to land, in blocks. */
     private static final int LANDING_SCAN_DEPTH = 48;
 
@@ -170,7 +166,8 @@ public abstract class BoatDreamMixin implements DreamTunnelBoat {
     @Unique
     private double dreamworld$tunnelLength;
     @Unique
-    private int dreamworld$reattachDelay;
+    @Nullable
+    private TunnelGeometry.Pair dreamworld$tunnelPair;
     @Unique
     private int dreamworld$jumpCooldown;
     @Unique
@@ -340,9 +337,6 @@ public abstract class BoatDreamMixin implements DreamTunnelBoat {
     @Inject(method = "tick", at = @At("TAIL"))
     private void dreamworld$dreamTick(CallbackInfo ci) {
         Boat boat = (Boat) (Object) this;
-        if (dreamworld$reattachDelay > 0) {
-            dreamworld$reattachDelay--;
-        }
         if (dreamworld$jumpCooldown > 0) {
             dreamworld$jumpCooldown--;
         }
@@ -373,10 +367,6 @@ public abstract class BoatDreamMixin implements DreamTunnelBoat {
             Vec3 delta = boat.getDeltaMovement();
             boat.setDeltaMovement(delta.x, DREAM_JUMP_POWER, delta.z);
             dreamworld$jumpCooldown = DREAM_JUMP_COOLDOWN;
-            return;
-        }
-        if (dreamworld$reattachDelay == 0) {
-            dreamworld$tryAttachTunnel(boat, rider);
         }
     }
 
@@ -598,25 +588,59 @@ public abstract class BoatDreamMixin implements DreamTunnelBoat {
 
     // ------------------------------------------------------------- graffiti tunnels
 
-    /** Snaps the boat onto the closest graffiti tunnel when it drives into one. */
-    @Unique
-    private void dreamworld$tryAttachTunnel(Boat boat, @Nullable LivingEntity rider) {
-        if (!boat.getPaddleState(Boat.PADDLE_LEFT) && !boat.getPaddleState(Boat.PADDLE_RIGHT)) {
-            // Only a boat being driven is caught, a parked boat stays parked.
-            return;
+    /**
+     * Attaches the boat to the graffiti tunnel closest to it, on request.
+     *
+     * <p>Nothing happens automatically any more: the rider asks for the tunnel with a right click, and
+     * the boat only takes it when it is close enough and there is a usable stretch ahead. That keeps
+     * a boat from being yanked off the ground every time it happens to pass under a tunnel.</p>
+     */
+    @Override
+    public boolean attachDreamTunnel(@Nullable TunnelGeometry.Pair preferred) {
+        Boat boat = (Boat) (Object) this;
+        if (!dreamworld$isDreamRider(boat.getControllingPassenger())) {
+            return false;
         }
+        return dreamworld$attachTunnel(boat, boat.getControllingPassenger(), preferred);
+    }
+
+    /**
+     * Attaches the boat to a tunnel within reach.
+     *
+     * <p>No line of sight is required: a tunnel usually runs through terrain, so the way between the
+     * boat and the line is almost never clear - only the distance to the line counts, and that is
+     * the rider's own interaction reach plus a block.</p>
+     *
+     * @param preferred the tunnel the rider pointed at, or {@code null} for the nearest one; the
+     *                  line already being ridden is never picked again, so a rider can switch
+     */
+    @Unique
+    private boolean dreamworld$attachTunnel(Boat boat, @Nullable LivingEntity rider,
+            @Nullable TunnelGeometry.Pair preferred) {
         List<BlockPos> anchors = dreamworld$tunnelAnchors(boat);
         if (anchors.size() < 2) {
-            return;
+            return false;
         }
         Vec3 position = boat.position();
-        TunnelGeometry.Tunnel tunnel = TunnelGeometry.nearest(anchors, position);
-        if (tunnel == null || tunnel.distanceSq() > TUNNEL_ATTACH_RADIUS * TUNNEL_ATTACH_RADIUS) {
-            return;
+        int limit = dreamworld$tunnelLimit(boat);
+        TunnelGeometry.Pair riding = dreamworld$inTunnel ? dreamworld$tunnelPair : null;
+        TunnelGeometry.Tunnel tunnel = preferred == null
+                ? TunnelGeometry.nearest(anchors, position, limit, riding)
+                : TunnelGeometry.forPair(anchors, preferred, position, limit);
+        if (tunnel == null) {
+            return false;
+        }
+        if (riding != null && dreamworld$rides(tunnel)) {
+            // Already on this line: re-attaching would only snap the boat along it.
+            return false;
+        }
+        double reach = dreamworld$attachReach(boat);
+        if (tunnel.distanceSq() > reach * reach) {
+            return false;
         }
         double length = tunnel.length();
         if (length < 2.0D) {
-            return;
+            return false;
         }
         Vec3 direction = tunnel.direction();
         double remaining;
@@ -628,10 +652,11 @@ public abstract class BoatDreamMixin implements DreamTunnelBoat {
             remaining = tunnel.remaining(1.0D);
         }
         if (remaining < 2.0D) {
-            return;
+            return false;
         }
         Vec3 projection = tunnel.projection();
         dreamworld$inTunnel = true;
+        dreamworld$tunnelPair = tunnel.pair();
         dreamworld$tunnelStart = projection;
         dreamworld$tunnelDir = direction;
         dreamworld$tunnelProgress = 0.0D;
@@ -644,6 +669,35 @@ public abstract class BoatDreamMixin implements DreamTunnelBoat {
         if (rider != null) {
             boat.positionRider(rider);
         }
+        return true;
+    }
+
+    /** How far the rider can reach a tunnel: their block interaction range plus one block. */
+    @Unique
+    private static double dreamworld$attachReach(Boat boat) {
+        return boat.getControllingPassenger() instanceof Player player
+                ? player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE) + 1.0D
+                : 0.0D;
+    }
+
+    /** {@return whether {@code tunnel} is the line the boat is already riding} */
+    @Unique
+    private boolean dreamworld$rides(TunnelGeometry.Tunnel tunnel) {
+        return dreamworld$tunnelPair != null && dreamworld$tunnelPair.equals(tunnel.pair());
+    }
+
+    @Override
+    @Nullable
+    public TunnelGeometry.Pair currentDreamTunnel() {
+        return dreamworld$inTunnel ? dreamworld$tunnelPair : null;
+    }
+
+    /** How many tunnels one graffiti may form: the server config, mirrored to the client. */
+    @Unique
+    private static int dreamworld$tunnelLimit(Boat boat) {
+        return boat.level() instanceof ServerLevel
+                ? DreamServerConfig.maxTunnelsPerGraffiti()
+                : DreamClientState.maxTunnelsPerGraffiti();
     }
 
     /**
@@ -762,7 +816,6 @@ public abstract class BoatDreamMixin implements DreamTunnelBoat {
     @Unique
     private void dreamworld$finishTunnel(Boat boat) {
         dreamworld$inTunnel = false;
-        dreamworld$reattachDelay = TUNNEL_REATTACH_DELAY;
         boat.noPhysics = false;
         boat.fallDistance = 0.0F;
         Vec3 end = dreamworld$tunnelStart.add(dreamworld$tunnelDir.scale(dreamworld$tunnelLength));
@@ -780,7 +833,6 @@ public abstract class BoatDreamMixin implements DreamTunnelBoat {
             return;
         }
         dreamworld$inTunnel = false;
-        dreamworld$reattachDelay = TUNNEL_REATTACH_DELAY;
         boat.noPhysics = false;
         Vec3 exit = boat.position();
         double travelled = Mth.clamp(dreamworld$tunnelProgress, 0.0D, dreamworld$tunnelLength);

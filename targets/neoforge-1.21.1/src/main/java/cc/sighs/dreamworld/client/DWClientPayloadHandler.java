@@ -55,7 +55,8 @@ public final class DWClientPayloadHandler {
     }
 
     public static void handleGraffitiList(DWPayloads.GraffitiListPayload payload, IPayloadContext context) {
-        context.enqueueWork(() -> DreamClientState.setGraffiti(payload.positions()));
+        context.enqueueWork(() -> DreamClientState.setGraffiti(payload.positions(),
+                payload.maxTunnelsPerGraffiti()));
     }
 
     public static void handleDreamEntities(DWPayloads.DreamEntitiesPayload payload, IPayloadContext context) {

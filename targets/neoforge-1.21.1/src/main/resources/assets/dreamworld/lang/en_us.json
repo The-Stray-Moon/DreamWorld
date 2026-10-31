@@ -17,5 +17,8 @@
   "effect.dreamworld.dream_walk": "Dream Walk",
   "hud.dreamworld.leave_tunnel": "Jump to leave the tunnel",
   "hud.dreamworld.reverse_tunnel": "Sprint to reverse direction",
-  "hud.dreamworld.destroy_anchor": "Sneak + right-click to destroy the bound anchor"
+  "hud.dreamworld.destroy_anchor": "Sneak + right-click to destroy the bound anchor",
+  "hud.dreamworld.tunnel_need_boat": "Not in a boat",
+  "hud.dreamworld.tunnel_too_far": "Too far from the tunnel",
+  "hud.dreamworld.tunnel_enter": "Interact to enter the dream tunnel"
 }
