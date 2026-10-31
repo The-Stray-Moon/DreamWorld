@@ -7,7 +7,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -91,26 +90,39 @@ public final class DreamIntrusion {
      * {@code ServerPlayerGameMode} reads instead.</p>
      */
     public static BlockState stateForMining(ServerPlayer player, ServerLevel level, BlockPos pos) {
-        return DreamManager.isDreaming(player) && isHoldingTool(player)
+        return DreamManager.isDreaming(player) && isHoldingShovel(player)
                 ? dreamState(level, pos)
                 : level.getBlockState(pos);
     }
 
-    /** Dream alloy gear is the only thing that may break blocks on the dream layer. */
-    public static boolean isHoldingTool(ServerPlayer player) {
-        ItemStack main = player.getMainHandItem();
-        return main.is(DWRegistry.DREAM_ALLOY_SWORD.get())
-                || main.is(DWRegistry.DREAM_ALLOY_SHOVEL.get())
-                || main.is(DWRegistry.DREAM_ALLOY_WAND.get());
+    /**
+     * The dream alloy shovel is the only tool that may break blocks on the dream layer.
+     *
+     * <p>The sword and the wand only ever act on creatures and on the crosshair respectively; letting
+     * them break blocks as well would blur the one-tool-one-job rule the gear is built around.</p>
+     */
+    public static boolean isHoldingShovel(ServerPlayer player) {
+        return player.getMainHandItem().is(DWRegistry.DREAM_ALLOY_SHOVEL.get());
+    }
+
+    /** The dream alloy sword is the only weapon that may hit creatures on the dream layer. */
+    public static boolean isHoldingSword(ServerPlayer player) {
+        return player.getMainHandItem().is(DWRegistry.DREAM_ALLOY_SWORD.get());
+    }
+
+    /** The wand is the only item whose blast moves blocks across the mirror. */
+    public static boolean isHoldingWand(ServerPlayer player) {
+        return player.getMainHandItem().is(DWRegistry.DREAM_ALLOY_WAND.get());
     }
 
     /**
      * Moves a creature to the opposite layer instead of killing it.
      *
      * <p>An intrusion is never a death: the creature leaves the layer it stood on without triggering
-     * a death event or loot, and a sleeping copy appears on the other layer at the same position (or
-     * at the anchor, when one is bound). The copy belongs to that layer only: dream copies are kept
-     * away from players that are not dreaming.</p>
+     * a death event or loot, and a copy appears on the other layer at the same position (or at the
+     * anchor, when one is bound). The copy follows the layer it lands on - asleep and inert in the
+     * dream, awake and simulated back in reality - and belongs to that layer only: dream copies are
+     * kept away from players that are not dreaming.</p>
      */
     public static void transferLiving(ServerPlayer actor, ServerLevel level, Entity creature) {
         if (creature instanceof Player || !creature.isAlive()) {
@@ -118,7 +130,7 @@ public final class DreamIntrusion {
         }
         boolean onDreamSide = DreamEntities.isDreamOnly(creature);
         BlockPos target = DreamManager.intrusionTarget(actor, creature.blockPosition());
-        Entity copy = DreamEntities.sleepingCopy(level, creature, target, !onDreamSide);
+        Entity copy = DreamEntities.intrudedCopy(level, creature, target, !onDreamSide);
         if (copy != null) {
             if (onDreamSide) {
                 // A dream creature moving to reality leaves clay on the dream side.

@@ -71,26 +71,47 @@ public final class DreamEntities {
     }
 
     /**
-     * Creates a sleeping copy of {@code source} at {@code pos} on the layer chosen by
-     * {@code dreamOnly}. Returns {@code null} when the entity type cannot be created.
+     * Creates the copy of {@code source} that represents an intrusion at {@code pos}.
+     *
+     * <p>Which layer the copy lands on decides how it behaves. A creature carried into the dream
+     * arrives asleep and inert, which is how an intruded creature looks there. A creature carried
+     * back into reality wakes up and keeps its normal AI, so an intrusion never leaves a mob
+     * permanently frozen in the real world.</p>
+     *
+     * <p>The saved tag is filtered before loading: a dream copy was created asleep, so its sleep
+     * position and its disabled AI would otherwise travel along and pin the real-world copy to a bed
+     * that does not exist. Returns {@code null} when the entity type cannot be created.</p>
      */
     @Nullable
-    public static Entity sleepingCopy(ServerLevel level, Entity source, BlockPos pos, boolean dreamOnly) {
+    public static Entity intrudedCopy(ServerLevel level, Entity source, BlockPos pos, boolean dreamOnly) {
         Entity copy = source.getType().create(level);
         if (copy == null) {
             return null;
         }
         CompoundTag tag = new CompoundTag();
         source.saveWithoutId(tag);
+        // A sleeping source would hand its bed down to the copy; each layer decides its own pose.
+        tag.remove("SleepingX");
+        tag.remove("SleepingY");
+        tag.remove("SleepingZ");
+        tag.remove("NoAI");
         copy.load(tag);
         copy.setUUID(UUID.randomUUID());
         Vec3 center = Vec3.atBottomCenterOf(pos);
         copy.moveTo(center.x, center.y, center.z, source.getYRot(), 0.0F);
         copy.setDeltaMovement(Vec3.ZERO);
-        copy.setPose(Pose.SLEEPING);
-        if (copy instanceof Mob mob) {
-            mob.setNoAi(true);
-            mob.setPersistenceRequired();
+        if (dreamOnly) {
+            copy.setPose(Pose.SLEEPING);
+            if (copy instanceof Mob mob) {
+                mob.setNoAi(true);
+                mob.setPersistenceRequired();
+            }
+        } else {
+            copy.setPose(Pose.STANDING);
+            if (copy instanceof Mob mob) {
+                mob.setNoAi(false);
+                mob.setPersistenceRequired();
+            }
         }
         setDreamOnly(copy, dreamOnly);
         if (!level.addFreshEntity(copy)) {

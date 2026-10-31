@@ -7,7 +7,9 @@
     "ClientLevelPatchMixin",
     "ModelBlockRendererMixin",
     "BlockRenderDispatcherMixin",
-    "MultiPlayerGameModeMixin"
+    "MultiPlayerGameModeMixin",
+    "DreamInteractionMixin",
+    "DreamWeatherMixin"
   ],
   "injectors": {
     "defaultRequire": 1

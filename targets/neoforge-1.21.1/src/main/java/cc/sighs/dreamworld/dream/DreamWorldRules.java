@@ -7,6 +7,7 @@ import cc.sighs.dreamworld.entity.DreamClayEntity;
 import cc.sighs.dreamworld.entity.DreamSpearEntity;
 import cc.sighs.dreamworld.item.DreamGraffitiItem;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.Boat;
@@ -37,13 +38,49 @@ public final class DreamWorldRules {
                 && DreamClientState.isDreaming();
     }
 
-    /** Blocks may only be broken with dream alloy gear or when they are graffiti. */
+    /**
+     * Blocks may only be broken with the dream alloy shovel; graffiti is shared by both layers and
+     * stays breakable by hand so it can always be removed.
+     */
     public static boolean mayBreak(Player player, BlockState state) {
-        return isGraffiti(state) || holdsDreamAlloy(player);
+        return isGraffiti(state) || holdsShovel(player);
+    }
+
+    /** Only the dream alloy sword may hit a creature inside the dream layer. */
+    public static boolean mayAttack(Player player, Entity target) {
+        if (!isDreaming(player)) {
+            return true;
+        }
+        if (target instanceof DreamSpearEntity || target instanceof DreamClayEntity
+                || target instanceof Boat) {
+            return true;
+        }
+        return holdsSword(player);
     }
 
     public static boolean mayInteractBlock(Player player, BlockState state) {
         return isGraffiti(state) || holdsDreamAlloy(player) || holdsGraffiti(player) || holdsBoat(player);
+    }
+
+    /**
+     * Block interaction keyed by position and face, which is what the client entry points have: the
+     * mixin hooks run before a hand-specific event exists.
+     *
+     * <p>The sleep gesture is exempt. Lying down to leave the dream is sneak + empty-hand + right
+     * click on the top face of a block, and it is handled entirely on the server; refusing the
+     * interaction on the client would drop the packet it needs. The gesture only intends to sleep,
+     * and the server rejects it whenever it is not a valid gesture anyway.</p>
+     */
+    public static boolean mayInteractBlockAt(Player player, BlockPos pos, Direction face) {
+        if (isSleepGesture(player, face)) {
+            return true;
+        }
+        return mayInteractBlock(player, player.level().getBlockState(pos));
+    }
+
+    /** Sneak + right-click with an empty main hand onto the top face of a block. */
+    public static boolean isSleepGesture(Player player, Direction face) {
+        return face == Direction.UP && player.isShiftKeyDown() && player.getMainHandItem().isEmpty();
     }
 
     public static boolean mayUseItem(Player player) {
@@ -112,6 +149,18 @@ public final class DreamWorldRules {
 
     private static boolean holdsDreamAlloy(Player player) {
         return isDreamAlloy(player.getMainHandItem()) || isDreamAlloy(player.getOffhandItem());
+    }
+
+    /** The dream alloy shovel is the only block tool of the set. */
+    private static boolean holdsShovel(Player player) {
+        return player.getMainHandItem().is(DWRegistry.DREAM_ALLOY_SHOVEL.get())
+                || player.getOffhandItem().is(DWRegistry.DREAM_ALLOY_SHOVEL.get());
+    }
+
+    /** The dream alloy sword is the only weapon of the set. */
+    private static boolean holdsSword(Player player) {
+        return player.getMainHandItem().is(DWRegistry.DREAM_ALLOY_SWORD.get())
+                || player.getOffhandItem().is(DWRegistry.DREAM_ALLOY_SWORD.get());
     }
 
     private static boolean isDreamAlloy(ItemStack stack) {
