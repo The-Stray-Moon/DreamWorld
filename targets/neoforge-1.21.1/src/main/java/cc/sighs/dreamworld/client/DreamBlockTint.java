@@ -198,6 +198,22 @@ public final class DreamBlockTint {
         return DreamClientConfig.swapPalettes() ? BLOCK_HUE : WATER_HUE;
     }
 
+    /**
+     * Colour the sky draws with.
+     *
+     * <p>The sky belongs to the water palette - the scheme colour it was chosen from is the same one
+     * the water palette is derived from, which is what makes a dream lake blend into the sky. Only
+     * the hue moves: the saturation and lightness stay those of the scheme sky, so the palette swap
+     * turns the sky pink together with the water instead of leaving a blue sky over a pink lake.</p>
+     */
+    public static Vec3 skyColor() {
+        float[] hsv = toHsv((float) DreamClientState.SKY_COLOR.x,
+                (float) DreamClientState.SKY_COLOR.y,
+                (float) DreamClientState.SKY_COLOR.z);
+        float[] rgb = toRgb(waterHue(), hsv[1], hsv[2]);
+        return new Vec3(rgb[0], rgb[1], rgb[2]);
+    }
+
     /** Deterministic [0, 1) noise for one channel of a block type hash. */
     private static float noise(int hash, int salt) {
         int mixed = hash * 0x9E3779B1 + salt * 0x85EBCA77;

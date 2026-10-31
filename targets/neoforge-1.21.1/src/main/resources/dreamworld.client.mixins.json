@@ -11,7 +11,9 @@
     "DreamInteractionMixin",
     "DreamWeatherMixin",
     "DreamPoseMixin",
-    "DreamFluidTintMixin"
+    "DreamFluidTintMixin",
+    "DreamSunMixin",
+    "DreamLightmapMixin"
   ],
   "injectors": {
     "defaultRequire": 1

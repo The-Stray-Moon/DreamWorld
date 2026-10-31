@@ -2,6 +2,8 @@ package cc.sighs.dreamworld.client.entity;
 
 import cc.sighs.dreamworld.DreamWorldNeoForge121;
 import cc.sighs.dreamworld.entity.BlubEntity;
+import java.util.Map;
+import java.util.WeakHashMap;
 import net.minecraft.client.model.HierarchicalModel;
 import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.client.model.geom.ModelPart;
@@ -13,7 +15,6 @@ import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.AnimationState;
-import net.minecraft.world.entity.Pose;
 
 /**
  * Model of the Blub, a blob with four stubby limbs and two long ears.
@@ -43,15 +44,27 @@ public class BlubModel extends HierarchicalModel<BlubEntity> {
 
     private final ModelPart root;
 
-    private final AnimationState idleState = new AnimationState();
-    private final AnimationState lieDownState = new AnimationState();
-    private final AnimationState lyingState = new AnimationState();
-    private final AnimationState getUpState = new AnimationState();
-    /** Resting value of the previous frame, used to catch the edges of the transition. */
-    private boolean wasResting;
+    /**
+     * Animation state per Blub.
+     *
+     * <p>The model instance is shared by every Blub in the level, so keeping the clips on the model
+     * would mix them: one resting and one walking Blub rendered in the same frame would restart the
+     * lie-down and get-up clips on every switch, and a body that is drawn lying but keeps bobbing
+     * through the transition reads as a bug. The state therefore belongs to the entity.</p>
+     */
+    private final Map<BlubEntity, Clips> clips = new WeakHashMap<>();
 
     public BlubModel(ModelPart root) {
         this.root = root;
+    }
+
+    /** The four clips of one Blub plus the resting value of its previous frame. */
+    private static final class Clips {
+        private final AnimationState idle = new AnimationState();
+        private final AnimationState lieDown = new AnimationState();
+        private final AnimationState lying = new AnimationState();
+        private final AnimationState getUp = new AnimationState();
+        private boolean wasResting;
     }
 
     public static LayerDefinition createBodyLayer() {
@@ -97,38 +110,39 @@ public class BlubModel extends HierarchicalModel<BlubEntity> {
     public void setupAnim(BlubEntity blub, float limbSwing, float limbSwingAmount,
             float ageInTicks, float netHeadYaw, float headPitch) {
         this.root.getAllParts().forEach(ModelPart::resetPose);
-        // An intruded copy is put to sleep through the entity pose instead of the rest timer, so both
-        // roads lead to the same lying clips.
-        boolean resting = blub.isResting() || blub.getPose() == Pose.SLEEPING;
-        if (resting != this.wasResting) {
-            this.wasResting = resting;
+        Clips clips = this.clips.computeIfAbsent(blub, key -> new Clips());
+        // The same state the entity itself uses to stay still, so the drawing and the movement can
+        // never disagree about whether this Blub is down.
+        boolean resting = blub.isDown();
+        if (resting != clips.wasResting) {
+            clips.wasResting = resting;
             if (resting) {
-                this.lieDownState.start(blub.tickCount);
-                this.lyingState.stop();
-                this.getUpState.stop();
+                clips.lieDown.start(blub.tickCount);
+                clips.lying.stop();
+                clips.getUp.stop();
             } else {
-                this.getUpState.start(blub.tickCount);
-                this.lieDownState.stop();
-                this.lyingState.stop();
+                clips.getUp.start(blub.tickCount);
+                clips.lieDown.stop();
+                clips.lying.stop();
             }
         }
         if (resting) {
-            animateResting(blub, ageInTicks);
+            animateResting(clips, blub, ageInTicks);
             return;
         }
-        if (this.getUpState.isStarted()) {
-            this.animate(this.getUpState, BlubAnimations.GET_UP, ageInTicks);
-            if (this.getUpState.getAccumulatedTime() >= GET_UP_MILLIS) {
-                this.getUpState.stop();
+        if (clips.getUp.isStarted()) {
+            this.animate(clips.getUp, BlubAnimations.GET_UP, ageInTicks);
+            if (clips.getUp.getAccumulatedTime() >= GET_UP_MILLIS) {
+                clips.getUp.stop();
             }
             return;
         }
         if (limbSwingAmount > WALK_THRESHOLD) {
-            this.idleState.stop();
+            clips.idle.stop();
             this.animateWalk(BlubAnimations.WALK, limbSwing, limbSwingAmount, 2.0F, 2.5F);
         } else {
-            this.idleState.startIfStopped(blub.tickCount);
-            this.animate(this.idleState, BlubAnimations.IDLE, ageInTicks);
+            clips.idle.startIfStopped(blub.tickCount);
+            this.animate(clips.idle, BlubAnimations.IDLE, ageInTicks);
         }
     }
 
@@ -138,16 +152,16 @@ public class BlubModel extends HierarchicalModel<BlubEntity> {
      * <p>The two clips animate the same parts, so only one of them may run per frame; the hand-off
      * happens once the transition has run out.</p>
      */
-    private void animateResting(BlubEntity blub, float ageInTicks) {
-        if (this.lieDownState.isStarted()) {
-            this.animate(this.lieDownState, BlubAnimations.LIE_DOWN, ageInTicks);
-            if (this.lieDownState.getAccumulatedTime() >= LIE_DOWN_MILLIS) {
-                this.lieDownState.stop();
-                this.lyingState.start(blub.tickCount);
+    private void animateResting(Clips clips, BlubEntity blub, float ageInTicks) {
+        if (clips.lieDown.isStarted()) {
+            this.animate(clips.lieDown, BlubAnimations.LIE_DOWN, ageInTicks);
+            if (clips.lieDown.getAccumulatedTime() >= LIE_DOWN_MILLIS) {
+                clips.lieDown.stop();
+                clips.lying.start(blub.tickCount);
             }
             return;
         }
-        this.lyingState.startIfStopped(blub.tickCount);
-        this.animate(this.lyingState, BlubAnimations.LYING, ageInTicks);
+        clips.lying.startIfStopped(blub.tickCount);
+        this.animate(clips.lying, BlubAnimations.LYING, ageInTicks);
     }
 }

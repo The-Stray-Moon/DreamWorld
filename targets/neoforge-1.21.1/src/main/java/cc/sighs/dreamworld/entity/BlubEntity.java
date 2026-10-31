@@ -58,8 +58,6 @@ public class BlubEntity extends Rabbit {
     private double lastX;
     private double lastZ;
     private boolean hasLastPos;
-    /** Whether the entity already had AI disabled before the rest, so waking up can restore it. */
-    private boolean noAiBeforeRest;
 
     public BlubEntity(EntityType<? extends BlubEntity> type, Level level) {
         super(type, level);
@@ -114,14 +112,11 @@ public class BlubEntity extends Rabbit {
             return;
         }
         if (resting) {
-            // Cut the AI for the duration: goals keep re-pathing while a mob is held in place, and
-            // every one of those paths reruns the move control. A mob that does not run its AI cannot
-            // wander off, cannot hop and cannot restart a path.
-            this.noAiBeforeRest = isNoAi();
-            setNoAi(true);
+            // No AI flag: {@link #aiStep()} is skipped while down, which already drops the goals, the
+            // move control, the jump control and the travel step in one go. Shutting the AI down for
+            // real would also disable everything else that keys off it - despawn checks, and the
+            // state that gets written to NBT - which a nap has no business touching.
             holdStill();
-        } else {
-            setNoAi(this.noAiBeforeRest);
         }
     }
 

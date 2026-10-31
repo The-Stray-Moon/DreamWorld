@@ -1,5 +1,6 @@
 package cc.sighs.dreamworld.mixin.client;
 
+import cc.sighs.dreamworld.client.DreamBlockTint;
 import cc.sighs.dreamworld.client.DreamClientState;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.Level;
@@ -29,7 +30,9 @@ public abstract class ClientLevelMixin {
     @Inject(method = "getSkyColor(Lnet/minecraft/world/phys/Vec3;F)Lnet/minecraft/world/phys/Vec3;", at = @At("HEAD"), cancellable = true)
     private void dreamworld$dreamSkyColor(Vec3 position, float partialTick, CallbackInfoReturnable<Vec3> cir) {
         if (DreamClientState.isDreaming()) {
-            cir.setReturnValue(DreamClientState.SKY_COLOR);
+            // Built from the palette rather than from the constant, so swapping the palettes recolours
+            // the sky along with the water instead of leaving a stale blue overhead.
+            cir.setReturnValue(DreamBlockTint.skyColor());
         }
     }
 
