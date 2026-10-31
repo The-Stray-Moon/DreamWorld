@@ -35,7 +35,7 @@ public abstract class BlockRenderDispatcherMixin {
     private void dreamworld$beginTint(BlockState state, BlockPos pos, BlockAndTintGetter level,
             PoseStack pose, VertexConsumer buffer, boolean checkSides, RandomSource random,
             ModelData modelData, RenderType renderType, CallbackInfo ci) {
-        DreamBlockTint.begin(state);
+        DreamBlockTint.begin(state, pos);
     }
 
     @Inject(method = RENDER_BATCHED, at = @At("RETURN"))

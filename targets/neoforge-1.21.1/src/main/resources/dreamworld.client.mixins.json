@@ -10,7 +10,8 @@
     "MultiPlayerGameModeMixin",
     "DreamInteractionMixin",
     "DreamWeatherMixin",
-    "DreamPoseMixin"
+    "DreamPoseMixin",
+    "DreamFluidTintMixin"
   ],
   "injectors": {
     "defaultRequire": 1

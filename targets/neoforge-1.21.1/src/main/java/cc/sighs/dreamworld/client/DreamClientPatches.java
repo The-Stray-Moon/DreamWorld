@@ -24,6 +24,8 @@ import net.minecraft.world.level.block.state.BlockState;
 public final class DreamClientPatches {
     private static final Map<Long, Map<BlockPos, BlockState>> PATCHES = new HashMap<>();
     private static final Map<BlockPos, BlockState> REAL_STATES = new HashMap<>();
+    /** Positions whose dream block was carried in by an intrusion and therefore keeps its colour. */
+    private static final java.util.Set<BlockPos> INTRUDED = new java.util.HashSet<>();
     private static boolean applying;
 
     private DreamClientPatches() {
@@ -37,17 +39,27 @@ public final class DreamClientPatches {
         }
         Map<BlockPos, BlockState> patch = new HashMap<>();
         for (DWPayloads.PatchEntry entry : entries) {
-            BlockPos pos = BlockPos.of(entry.pos());
+            BlockPos pos = BlockPos.of(entry.pos()).immutable();
             patch.put(pos, NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK), entry.state()));
             // The real state comes from the server: the position already holds the dream block (or a
             // prediction of a break) by now, so reading it here would cache a guess.
-            REAL_STATES.put(pos.immutable(),
+            REAL_STATES.put(pos,
                     NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK), entry.realState()));
+            if (entry.intruded()) {
+                INTRUDED.add(pos);
+            } else {
+                INTRUDED.remove(pos);
+            }
         }
         PATCHES.put(chunkLong, patch);
         if (DreamClientState.isDreaming()) {
             applyChunk(chunkLong);
         }
+    }
+
+    /** {@return whether the dream block at {@code pos} was carried in by an intrusion} */
+    public static boolean isIntruded(BlockPos pos) {
+        return !INTRUDED.isEmpty() && INTRUDED.contains(pos);
     }
 
     /** Applies every known patch; called when the dream starts. */

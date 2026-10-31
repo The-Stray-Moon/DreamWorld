@@ -57,16 +57,16 @@ public final class DWPayloads {
     }
 
     /**
-     * One patched position: the block state the dream layer shows there, plus the real state the
-     * overlay hides. The real state comes from the server because the client cannot observe it: by
-     * the time a patch arrives, the client position already holds the dream block (or a local
-     * prediction of a break), so anything it cached there would be a guess.
+     * One patched position: the block state the dream layer shows there, the real state the overlay
+     * hides, and whether the dream block was carried in by an intrusion. An intruded block keeps the
+     * colour of the layer it came from, so the client needs to know about it when tinting.
      */
-    public record PatchEntry(long pos, CompoundTag state, CompoundTag realState) {
+    public record PatchEntry(long pos, CompoundTag state, CompoundTag realState, boolean intruded) {
         public static final StreamCodec<RegistryFriendlyByteBuf, PatchEntry> STREAM_CODEC =
                 StreamCodec.composite(ByteBufCodecs.VAR_LONG, PatchEntry::pos,
                         ByteBufCodecs.COMPOUND_TAG, PatchEntry::state,
-                        ByteBufCodecs.COMPOUND_TAG, PatchEntry::realState, PatchEntry::new);
+                        ByteBufCodecs.COMPOUND_TAG, PatchEntry::realState,
+                        ByteBufCodecs.BOOL, PatchEntry::intruded, PatchEntry::new);
     }
 
     /** Dream patch set of one chunk, pushed to dreaming clients. */

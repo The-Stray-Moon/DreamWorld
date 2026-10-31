@@ -4,8 +4,7 @@ import cc.sighs.dreamworld.client.DreamClientState;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.Mixin;import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -16,9 +15,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  */
 @Mixin(ClientLevel.class)
 public abstract class ClientLevelMixin {
-    /** Fixed dream sky: rgb(73, 128, 146). */
-    private static final Vec3 dreamworld$DREAM_SKY_COLOR =
-            new Vec3(73.0D / 255.0D, 128.0D / 255.0D, 146.0D / 255.0D);
     /** 0.0 is noon: the sun sits at its highest point and the sunrise glow is not drawn. */
     private static final float dreamworld$DREAM_TIME_OF_DAY = 0.0F;
 
@@ -33,7 +29,7 @@ public abstract class ClientLevelMixin {
     @Inject(method = "getSkyColor(Lnet/minecraft/world/phys/Vec3;F)Lnet/minecraft/world/phys/Vec3;", at = @At("HEAD"), cancellable = true)
     private void dreamworld$dreamSkyColor(Vec3 position, float partialTick, CallbackInfoReturnable<Vec3> cir) {
         if (DreamClientState.isDreaming()) {
-            cir.setReturnValue(dreamworld$DREAM_SKY_COLOR);
+            cir.setReturnValue(DreamClientState.SKY_COLOR);
         }
     }
 

@@ -7,6 +7,15 @@ import net.minecraft.core.BlockPos;
  * Client-only dream state, written by {@link DWClientPayloadHandler} and read by renderers.
  */
 public final class DreamClientState {
+    /**
+     * Colour of the dream sky, rgb(73, 128, 146).
+     *
+     * <p>Used by the sky renderer. The water palette keeps its own scheme colour, so this is the
+     * only place the sky's exact tone is defined.</p>
+     */
+    public static final net.minecraft.world.phys.Vec3 SKY_COLOR =
+            new net.minecraft.world.phys.Vec3(73.0D / 255.0D, 128.0D / 255.0D, 146.0D / 255.0D);
+
     private static volatile boolean dreaming;
     private static volatile boolean anchorBound;
     private static volatile List<BlockPos> graffiti = List.of();

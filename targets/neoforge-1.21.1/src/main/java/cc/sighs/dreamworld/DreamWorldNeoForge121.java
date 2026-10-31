@@ -1,13 +1,17 @@
 package cc.sighs.dreamworld;
 
+import cc.sighs.dreamworld.config.DreamClientConfig;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
 
 @Mod(DreamWorldNeoForge121.MOD_ID)
 public final class DreamWorldNeoForge121 {
     public static final String MOD_ID = "dreamworld";
 
-    public DreamWorldNeoForge121(IEventBus modBus) {
+    public DreamWorldNeoForge121(IEventBus modBus, ModContainer container) {
+        container.registerConfig(ModConfig.Type.CLIENT, DreamClientConfig.SPEC);
         DWRegistry.ITEMS.register(modBus);
         DWRegistry.BLOCKS.register(modBus);
         DWRegistry.BLOCK_ENTITIES.register(modBus);

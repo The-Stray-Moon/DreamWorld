@@ -8,15 +8,21 @@ import org.spongepowered.asm.mixin.injection.ModifyArgs;
 import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
 
 /**
- * Per-block-face dream colour.
+ * Per-block-face dream colour, applied before the shading.
  *
- * <p>Rewrites the colour arguments of {@code putQuadData}'s vertex write: the brightness array is
- * lifted to full and the three colour factors are replaced by {@link DreamBlockTint#transform}
- * (hue-rotate to pink, brighten, multiply by the per-block blend). This runs while the chunk mesh is
- * built, so each block face is coloured individually.</p>
+ * <p>{@code putQuadData} hands the vertex writer three things that matter: the per-vertex shading
+ * array, the base colour and the lightmap. The tint rewrites only the base colour, so the shading is
+ * still multiplied on top of it by {@code putBulkData} - the face is tinted first and lit afterwards,
+ * which keeps the result reading as a surface instead of a flat silhouette. Baking the tint into
+ * the shading array, as the first version did, threw the shadows away entirely.</p>
  */
 @Mixin(ModelBlockRenderer.class)
 public abstract class ModelBlockRendererMixin {
+    /** The base colour arguments of the vertex write: red, green, blue. */
+    private static final int ARG_RED = 3;
+    private static final int ARG_GREEN = 4;
+    private static final int ARG_BLUE = 5;
+
     private static final String PUT_BULK_DATA =
             "Lcom/mojang/blaze3d/vertex/VertexConsumer;putBulkData("
                     + "Lcom/mojang/blaze3d/vertex/PoseStack$Pose;"
@@ -29,10 +35,10 @@ public abstract class ModelBlockRendererMixin {
         if (!DreamBlockTint.active()) {
             return;
         }
-        args.set(2, new float[]{1.0F, 1.0F, 1.0F, 1.0F});
-        float[] colour = DreamBlockTint.transform(args.get(3), args.get(4), args.get(5));
-        args.set(3, colour[0]);
-        args.set(4, colour[1]);
-        args.set(5, colour[2]);
+        float[] colour = DreamBlockTint.transform(args.get(ARG_RED), args.get(ARG_GREEN),
+                args.get(ARG_BLUE));
+        args.set(ARG_RED, colour[0]);
+        args.set(ARG_GREEN, colour[1]);
+        args.set(ARG_BLUE, colour[2]);
     }
 }

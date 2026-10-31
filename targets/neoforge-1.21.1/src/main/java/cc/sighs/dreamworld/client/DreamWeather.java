@@ -29,7 +29,7 @@ public final class DreamWeather {
     /** Petals start between this many blocks above the dreamer and twice that. */
     private static final double BASE_HEIGHT = 6.0D;
     /** Light blossom drift while the real weather is clear. */
-    private static final int PETALS_PER_TICK_CLEAR = 2;
+    private static final int PETALS_PER_TICK_CLEAR = 4;
     /** Thicker blossom while it rains or storms in reality. */
     private static final int PETALS_PER_TICK_STORM = 8;
     /** Weather level above which the real world counts as "not clear". */
