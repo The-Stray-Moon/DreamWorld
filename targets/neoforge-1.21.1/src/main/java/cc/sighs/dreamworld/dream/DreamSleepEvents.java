@@ -19,7 +19,6 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.entity.EntityMountEvent;
 import net.neoforged.neoforge.event.entity.player.CanContinueSleepingEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
@@ -190,21 +189,14 @@ public final class DreamSleepEvents {
     }
 
     /**
-     * Leaves the bed after the delay but keeps the sleeping pose, so other players still see the
-     * dreamer lying there while the client shows the mirror layer. The wake-up is internal, so it
-     * must not be mistaken for a dream exit.
+     * Leaves the bed after the delay, so the body is free to move while the client shows the mirror
+     * layer. Other players keep seeing the dreamer lying down, but that comes from the client-side
+     * pose and not from the server's sleep state. The wake-up is internal, so it must not be
+     * mistaken for a dream exit.
      */
     private static void enterDreamFromGround(ServerPlayer player) {
         wakeSilently(player);
         DreamManager.enterDream(player);
-    }
-
-    /** Mounting or dismounting changes who owns the movement, so the dream body is re-applied. */
-    @SubscribeEvent
-    public static void onMount(EntityMountEvent event) {
-        if (event.getEntityMounting() instanceof ServerPlayer player && DreamManager.isDreaming(player)) {
-            DreamManager.applyDreamPose(player);
-        }
     }
 
     /**
@@ -313,14 +305,36 @@ public final class DreamSleepEvents {
     // ----------------------------------------------------- session boundaries
 
     /**
-     * The dream flag is stored in the player's persistent data, but the forced sleeping pose is
-     * not saved. Re-applying it on login also re-syncs the client visuals.
+     * Re-syncs everything a fresh client session has to know about a returning player.
+     *
+     * <p>The dream flag lives in persistent data, so a reload while dreaming has to restore the
+     * patched view; the anchor flag and the set of dreaming bodies are session state that every
+     * client starts without.</p>
      */
     @SubscribeEvent
     public static void onLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player && DreamManager.isDreaming(player)) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        DreamManager.pushAnchorState(player);
+        if (player.getServer() != null) {
+            // Keep every client's list of dreaming bodies in step with the session.
+            DreamManager.broadcastDreamers(player.getServer());
+        }
+        if (DreamManager.isDreaming(player)) {
             DreamManager.setDreaming(player, true);
-            DreamPatchSync.sendAround(player);
+            // Chunks are still being sent, and every chunk the player starts watching gets its
+            // patch set from the watch event. Re-sending the whole view distance here would only
+            // pile a few hundred extra payloads onto the join.
+            DreamManager.settleOutOfTerrain(player);
+        }
+    }
+
+    /** A leaving player must disappear from the other clients' list of dreaming bodies. */
+    @SubscribeEvent
+    public static void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player && player.getServer() != null) {
+            DreamManager.broadcastDreamers(player.getServer());
         }
     }
 

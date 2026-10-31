@@ -9,7 +9,8 @@
     "BlockRenderDispatcherMixin",
     "MultiPlayerGameModeMixin",
     "DreamInteractionMixin",
-    "DreamWeatherMixin"
+    "DreamWeatherMixin",
+    "DreamPoseMixin"
   ],
   "injectors": {
     "defaultRequire": 1

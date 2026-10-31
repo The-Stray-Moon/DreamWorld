@@ -43,6 +43,11 @@ public final class DreamPatches extends SavedData {
         return forChunk(new ChunkPos(pos));
     }
 
+    /** The state the dream layer shows at {@code pos}: the patch when present, else the real state. */
+    public BlockState stateAt(ServerLevel level, BlockPos pos) {
+        return forChunkOf(pos).getOrDefault(pos, level.getBlockState(pos));
+    }
+
     /**
      * Remembers the state that a real-world edit is about to overwrite. The first edit of a
      * position wins, so the dream always keeps the oldest known state.

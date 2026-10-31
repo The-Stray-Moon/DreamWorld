@@ -88,6 +88,10 @@ public final class DreamWorldRules {
     }
 
     public static boolean mayInteractEntity(Player player, Entity target) {
+        // A spear anchored on the other layer is a ghost: it is not there for this player.
+        if (target instanceof DreamSpearEntity spear && spear.dreamSide() != DreamClientState.isDreaming()) {
+            return false;
+        }
         return holdsDreamAlloy(player) || target instanceof DreamSpearEntity
                 || target instanceof DreamClayEntity || target instanceof Boat;
     }

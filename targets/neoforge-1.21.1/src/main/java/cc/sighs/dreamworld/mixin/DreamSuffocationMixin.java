@@ -18,10 +18,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * {@code LivingEntity#baseTick} would then deal one point of in-wall damage per tick until death,
  * while the client has nothing to push the player out of.</p>
  *
- * <p>{@code LivingEntity#isInWall} already exempts sleepers, but a dreamer is not sleeping: the
- * forced sleeping pose only changes the hitbox, {@code getSleepingPos} stays empty. The exemption is
- * therefore extended to dreamers explicitly. Collision, gravity and falling stay untouched - only the
- * real-world suffocation check is skipped.</p>
+ * <p>{@code LivingEntity#isInWall} already exempts sleepers, but a dreamer is not sleeping at all:
+ * the sleeping look exists only on the observers' clients, while the server player keeps a normal
+ * standing pose and no sleeping position. The exemption is therefore extended to dreamers
+ * explicitly. Collision, gravity and falling stay untouched - only the real-world suffocation check
+ * is skipped.</p>
  */
 @Mixin(LivingEntity.class)
 public abstract class DreamSuffocationMixin {

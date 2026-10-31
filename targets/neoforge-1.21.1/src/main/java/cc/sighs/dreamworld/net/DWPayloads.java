@@ -2,7 +2,9 @@ package cc.sighs.dreamworld.net;
 
 import cc.sighs.dreamworld.DreamWorldNeoForge121;
 import cc.sighs.dreamworld.client.DWClientPayloadHandler;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -95,11 +97,65 @@ public final class DWPayloads {
         }
     }
 
+    /** Whether this player currently has a dream alloy spear anchored somewhere. */
+    public record AnchorStatePayload(boolean bound) implements CustomPacketPayload {
+        public static final Type<AnchorStatePayload> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath(DreamWorldNeoForge121.MOD_ID, "anchor_state"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, AnchorStatePayload> STREAM_CODEC =
+                StreamCodec.of((buffer, payload) -> buffer.writeBoolean(payload.bound()),
+                        buffer -> new AnchorStatePayload(buffer.readBoolean()));
+
+        @Override
+        public Type<AnchorStatePayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * UUIDs of the players currently dreaming.
+     *
+     * <p>Only other clients need this: the dreamer's body is not actually asleep anywhere, it is a
+     * normal standing player that the dreamer's own client and the server see as such. Everybody
+     * else renders that player lying down, which is why the set is broadcast rather than tied to
+     * the entity data of a single player.</p>
+     */
+    public record DreamersPayload(List<UUID> dreamers) implements CustomPacketPayload {
+        public static final Type<DreamersPayload> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath(DreamWorldNeoForge121.MOD_ID, "dreamers"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, DreamersPayload> STREAM_CODEC =
+                StreamCodec.of((buffer, payload) -> {
+                    buffer.writeVarInt(payload.dreamers().size());
+                    for (UUID dreamer : payload.dreamers()) {
+                        buffer.writeUUID(dreamer);
+                    }
+                }, buffer -> {
+                    int size = buffer.readVarInt();
+                    List<UUID> dreamers = new ArrayList<>(size);
+                    for (int index = 0; index < size; index++) {
+                        dreamers.add(buffer.readUUID());
+                    }
+                    return new DreamersPayload(dreamers);
+                });
+
+        @Override
+        public Type<DreamersPayload> type() {
+            return TYPE;
+        }
+    }
+
     @SubscribeEvent
     public static void register(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
         registrar.playToClient(DreamStatePayload.TYPE, DreamStatePayload.STREAM_CODEC,
                 new DirectionalPayloadHandler<>(DWClientPayloadHandler::handleDreamState,
+                        (payload, context) -> {
+                        }));
+        registrar.playToClient(DreamersPayload.TYPE, DreamersPayload.STREAM_CODEC,
+                new DirectionalPayloadHandler<>(DWClientPayloadHandler::handleDreamers,
+                        (payload, context) -> {
+                        }));
+        registrar.playToClient(AnchorStatePayload.TYPE, AnchorStatePayload.STREAM_CODEC,
+                new DirectionalPayloadHandler<>(DWClientPayloadHandler::handleAnchorState,
                         (payload, context) -> {
                         }));
         registrar.playToClient(GraffitiListPayload.TYPE, GraffitiListPayload.STREAM_CODEC,

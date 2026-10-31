@@ -15,5 +15,6 @@
   "entity.dreamworld.dream_rabbit": "Dream Rabbit",
   "entity.dreamworld.dream_spear": "Dream Alloy Spear",
   "effect.dreamworld.dream_walk": "Dream Walk",
-  "hud.dreamworld.leave_tunnel": "Jump to leave the tunnel"
+  "hud.dreamworld.leave_tunnel": "Jump to leave the tunnel",
+  "hud.dreamworld.destroy_anchor": "Sneak + right-click to destroy the bound anchor"
 }

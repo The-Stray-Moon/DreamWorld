@@ -45,4 +45,12 @@ public final class DWClientPayloadHandler {
     public static void handleDreamPatch(DWPayloads.DreamPatchPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> DreamClientPatches.accept(payload.chunkPos(), payload.entries()));
     }
+
+    public static void handleAnchorState(DWPayloads.AnchorStatePayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> DreamClientState.setAnchorBound(payload.bound()));
+    }
+
+    public static void handleDreamers(DWPayloads.DreamersPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> DreamClientState.setDreamers(payload.dreamers()));
+    }
 }

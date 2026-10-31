@@ -33,7 +33,7 @@ public final class DreamIntrusion {
         if (DreamManager.isDreaming(actor)) {
             breakDreamBlock(actor, level, pos);
         } else {
-            breakRealBlock(level, pos);
+            breakRealBlock(actor, level, pos);
         }
     }
 
@@ -66,19 +66,24 @@ public final class DreamIntrusion {
      * <p>The patch has to be written explicitly. {@link DreamPatches#recordRealEdit} only remembers
      * the oldest state of a position, so the recorder alone would keep the air that was stored when
      * the block was originally placed and the broken block would never show up in the dream.</p>
+     *
+     * <p>A dream-side anchor redirects the whole transfer: the block leaves reality at {@code pos}
+     * and appears in the dream at the anchored position instead of the mirrored coordinates.</p>
      */
-    private static void breakRealBlock(ServerLevel level, BlockPos pos) {
+    private static void breakRealBlock(ServerPlayer actor, ServerLevel level, BlockPos pos) {
         BlockState carried = level.getBlockState(pos);
         if (carried.isAir() || carried.getBlock() instanceof DreamGraffitiBlock) {
             return;
         }
-        DreamPatches.get(level).setDreamState(level, pos, carried);
+        BlockPos target = DreamManager.intrusionTarget(actor, pos);
+        DreamPatches patches = DreamPatches.get(level);
+        patches.setDreamState(level, target, carried);
         level.removeBlock(pos, false);
     }
 
     /** The state the dream layer shows at {@code pos}: the patch when present, else the real state. */
     private static BlockState dreamState(ServerLevel level, BlockPos pos) {
-        return DreamPatches.get(level).forChunkOf(pos).getOrDefault(pos, level.getBlockState(pos));
+        return DreamPatches.get(level).stateAt(level, pos);
     }
 
     /**
