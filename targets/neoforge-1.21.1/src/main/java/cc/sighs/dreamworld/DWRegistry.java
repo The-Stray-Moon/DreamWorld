@@ -128,7 +128,8 @@ public final class DWRegistry {
 
     public static final DeferredItem<DeferredSpawnEggItem> BLUB_SPAWN_EGG =
             ITEMS.register("blub_spawn_egg", () -> new DeferredSpawnEggItem(BLUB::get,
-                    0x3A6EDC, 0xBFE3FF, new Item.Properties()));
+                    // Shell and spots, taken from the blub's own cyan-blue palette.
+                    0x5CC4EF, 0xDFF6FF, new Item.Properties()));
 
     // ---------------------------------------------------------------- effects
 
@@ -152,7 +153,7 @@ public final class DWRegistry {
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> DREAM_TAB =
             TABS.register("dreamworld", () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.dreamworld"))
-                    .icon(() -> new ItemStack(DREAM_CRYSTAL.get()))
+                    .icon(() -> new ItemStack(DREAM_GRAFFITI_ITEM.get()))
                     .displayItems((params, output) -> {
                         output.accept(DREAM_CLAY.get());
                         output.accept(DREAM_CRYSTAL.get());

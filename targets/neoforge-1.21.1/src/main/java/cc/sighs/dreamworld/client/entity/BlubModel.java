@@ -37,7 +37,7 @@ public class BlubModel extends HierarchicalModel<BlubEntity> {
 
     /** Length of the one-shot transitions, in milliseconds. */
     private static final long LIE_DOWN_MILLIS = 958L;
-    private static final long GET_UP_MILLIS = 917L;
+    private static final long GET_UP_MILLIS = 1042L;
     /** Limb speed above which the walk cycle replaces the idle one. */
     private static final float WALK_THRESHOLD = 0.05F;
 

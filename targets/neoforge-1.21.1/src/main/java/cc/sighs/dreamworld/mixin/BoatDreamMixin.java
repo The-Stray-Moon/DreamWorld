@@ -1,12 +1,15 @@
 package cc.sighs.dreamworld.mixin;
 
-import cc.sighs.dreamworld.client.DreamClientState;
+import cc.sighs.dreamworld.boat.DreamBoatGate;
 import cc.sighs.dreamworld.boat.TunnelGeometry;
+import cc.sighs.dreamworld.client.DreamClientState;
+import cc.sighs.dreamworld.dream.DreamEntities;
 import cc.sighs.dreamworld.dream.DreamManager;
 import cc.sighs.dreamworld.dream.GraffitiRegistry;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.OptionalDouble;
 import java.util.Set;
 import javax.annotation.Nullable;
 import net.minecraft.core.BlockPos;
@@ -16,6 +19,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.level.Level;
@@ -28,6 +32,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -43,6 +48,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * <p>All effects are gated on the controlling passenger being a dreaming player, so ordinary
  * boating is untouched. The boat is simulated by whichever side controls it (the owning client
  * for the rider, the server for the same boat), so the gate has to work on both sides.</p>
+ *
+ * <p>Inside a graffiti tunnel the boat is still the player's to drive: its own thrust, friction and
+ * speed are untouched, and the tunnel only removes whatever part of the motion does not run along
+ * its axis. The line fixes the direction; the pacing stays in the player's hands.</p>
  */
 @Mixin(Boat.class)
 public abstract class BoatDreamMixin {
@@ -56,6 +65,26 @@ public abstract class BoatDreamMixin {
      * keep up with it.</p>
      */
     private static final float DREAM_FRICTION = 0.9465F;
+    /**
+     * Tunnel friction: blue ice.
+     *
+     * <p>A graffiti tunnel is meant to be the fastest surface in the dream, so the boat keeps what
+     * little momentum blue ice gives instead of the ordinary dream drag. The vanilla thrust is a
+     * fixed 0.04 per tick, which with this friction reaches the same speed a boat reaches on blue
+     * ice in the overworld.</p>
+     */
+    private static final float TUNNEL_FRICTION = 0.989F;
+    /** Top speed the vanilla thrust reaches on the tunnel friction: {@code thrust / (1 - friction)}. */
+    private static final double TUNNEL_TOP_SPEED = 0.04D / (1.0D - TUNNEL_FRICTION);
+    /**
+     * Fraction of the remaining gap to {@link #TUNNEL_TOP_SPEED} the start thrust closes per tick.
+     *
+     * <p>Blue ice keeps its speed almost for free, which also means the vanilla thrust of 0.04 per
+     * tick needs dozens of ticks to get going - far too slow for a tunnel that is usually short.
+     * Rowing forward therefore adds a proportional push on top of it: the boat leaves the mouth it
+     * entered with some speed instead of crawling.</p>
+     */
+    private static final double TUNNEL_RAMP = 0.12D;
     /** Extra horizontal drag per tick while the boat rests on the ground with no paddle held. */
     private static final double DREAM_COAST_DRAG = 0.90D;
     /** Extra forward push per tick on top of the vanilla paddling force. */
@@ -70,12 +99,25 @@ public abstract class BoatDreamMixin {
     private static final double DREAM_CLIMB_SPEED = 0.12D;
     /** Upper bound of the wall-climbing speed. */
     private static final double DREAM_CLIMB_MAX = 0.5D;
-    /** Highest step the boat rides up in one go, in blocks. */
-    private static final double DREAM_STEP_HEIGHT = 1.25D;
+    /**
+     * Highest step the boat rides up with the assisted lift, in blocks.
+     *
+     * <p>A full block plus the clearance margin, matching the smooth-step reference: every ordinary
+     * terrain step is covered, anything taller falls back to the wall climb.</p>
+     */
+    private static final double DREAM_STEP_HEIGHT = 1.05D;
+    /** Extra room required above the target surface. */
+    private static final double DREAM_STEP_CLEARANCE = 0.04D;
+    /** How far below the hull a surface may be to still count as support under the boat. */
+    private static final double DREAM_MAX_GROUND_DISTANCE = 1.5D;
     /** Look-ahead used to find the step target, in ticks of current travel. */
-    private static final double DREAM_STEP_PREDICTION_TICKS = 3.0D;
-    private static final double DREAM_STEP_LOOKAHEAD_MIN = 0.6D;
-    private static final double DREAM_STEP_LOOKAHEAD_MAX = 2.5D;
+    private static final double DREAM_STEP_PREDICTION_TICKS = 6.0D;
+    private static final double DREAM_STEP_LOOKAHEAD_MIN = 0.7D;
+    private static final double DREAM_STEP_LOOKAHEAD_MAX = 1.5D;
+    /** Ceiling of the assisted lift velocity. */
+    private static final double DREAM_STEP_MAX_LIFT = 0.42D;
+    /** Ticks the assist keeps pushing after the obstacle has left the probe. */
+    private static final int DREAM_STEP_HOLD_TICKS = 6;
     /** Smallest horizontal speed at which the boat is considered to be driving into terrain. */
     private static final double DREAM_STEP_MIN_SPEED = 0.05D;
     /**
@@ -92,8 +134,6 @@ public abstract class BoatDreamMixin {
     private static final int DREAM_JUMP_COOLDOWN = 8;
     /** Distance at which a moving boat locks onto a graffiti tunnel. */
     private static final double TUNNEL_ATTACH_RADIUS = 4.0D;
-    /** Blocks travelled per tick inside a tunnel. */
-    private static final double TUNNEL_SPEED = 2.0D;
     /** Distance the boat is pushed away from a tunnel when it leaves one. */
     private static final double TUNNEL_ESCAPE_DISTANCE = 6.0D;
     /** Ticks during which a boat cannot lock onto a tunnel again after leaving one. */
@@ -105,7 +145,15 @@ public abstract class BoatDreamMixin {
 
     @Shadow
     private float deltaRotation;
+    @Shadow
+    private boolean inputDown;
 
+    @Unique
+    private int dreamworld$assistTicks;
+    @Unique
+    private double dreamworld$lastTargetY;
+    @Unique
+    private double dreamworld$lastDistance;
     @Unique
     private boolean dreamworld$inTunnel;
     @Unique
@@ -127,27 +175,27 @@ public abstract class BoatDreamMixin {
     /** A boat is a dream boat only while a dreaming player controls it. */
     @Unique
     private static boolean dreamworld$isDreamRider(@Nullable Entity rider) {
-        if (!(rider instanceof Player player)) {
-            return false;
-        }
-        if (player instanceof ServerPlayer serverPlayer) {
-            return DreamManager.isDreaming(serverPlayer);
-        }
-        // The owning client simulates the boat, so it needs the same answer; DreamClientState only
-        // holds the flag that DreamManager mirrors to this client and has no client-only imports.
-        return player.isLocalPlayer() && DreamClientState.isDreaming();
+        return DreamBoatGate.isDreamRider(rider);
     }
 
     // ------------------------------------------------------------- blue ice speed
 
     @Inject(method = "getGroundFriction", at = @At("RETURN"), cancellable = true)
     private void dreamworld$iceFriction(CallbackInfoReturnable<Float> cir) {
-        if (!dreamworld$isDreamRider(((Boat) (Object) this).getControllingPassenger())) {
+        Boat boat = (Boat) (Object) this;
+        if (!dreamworld$isDreamRider(boat.getControllingPassenger())) {
             return;
         }
         float friction = cir.getReturnValueF();
+        if (dreamworld$inTunnel) {
+            // A tunnel is blue ice: the boat keeps its speed along the line almost for free.
+            cir.setReturnValue(Float.isNaN(friction) ? TUNNEL_FRICTION : Math.max(friction, TUNNEL_FRICTION));
+            return;
+        }
         if (Float.isNaN(friction)) {
-            // Nothing below the boat: keep the vanilla IN_AIR state.
+            // Nothing below the boat: the dream boat glides anyway, so it keeps the same cruise
+            // speed instead of falling back to vanilla air drag.
+            cir.setReturnValue(DREAM_FRICTION);
             return;
         }
         cir.setReturnValue(Math.max(friction, DREAM_FRICTION));
@@ -194,12 +242,67 @@ public abstract class BoatDreamMixin {
         dreamworld$climbTerrain(boat);
     }
 
+    /**
+     * Lets a tunnel rider look around freely.
+     *
+     * <p>{@code clampRotation} pulls the rider's yaw back to within 105 degrees of the boat's bow.
+     * That is fine while the driver can turn the boat to match, but inside a tunnel the bow is fixed,
+     * so looking over the shoulder would be snapped back every tick - one of the reasons the view
+     * seemed to turn on its own.</p>
+     */
+    @Inject(method = "clampRotation", at = @At("HEAD"), cancellable = true)
+    private void dreamworld$freeLookInTunnel(Entity rider, CallbackInfo ci) {
+        if (dreamworld$inTunnel) {
+            ci.cancel();
+        }
+    }
+
+    /**
+     * Limits the turn rate, and cancels it entirely inside a tunnel.
+     *
+     * <p>Inside a tunnel the bow is pinned to the axis, so a turn has nowhere to go - but vanilla
+     * still accumulates {@code deltaRotation} and {@code Boat#positionRider} adds that value to the
+     * rider's own yaw every tick. The boat would keep its heading while the player's view kept
+     * spinning. Zeroing the turn is what stops the camera from rotating on its own.</p>
+     */
     @Inject(method = "controlBoat", at = @At("TAIL"))
     private void dreamworld$clampTurn(CallbackInfo ci) {
-        if (!dreamworld$isDreamRider(((Boat) (Object) this).getControllingPassenger())) {
+        Boat boat = (Boat) (Object) this;
+        if (!dreamworld$isDreamRider(boat.getControllingPassenger())) {
+            return;
+        }
+        if (dreamworld$inTunnel) {
+            this.deltaRotation = 0.0F;
+            if (this.inputDown) {
+                // Backing up has no meaning inside a tunnel: the oars just brake the boat.
+                boat.setDeltaMovement(Vec3.ZERO);
+                return;
+            }
+            dreamworld$tunnelStartThrust(boat);
             return;
         }
         this.deltaRotation = Mth.clamp(this.deltaRotation, -DREAM_MAX_TURN, DREAM_MAX_TURN);
+    }
+
+    /**
+     * Extra thrust while rowing forward in a tunnel, so the boat gets going quickly.
+     *
+     * <p>The push is proportional to how far the boat still is from {@link #TUNNEL_TOP_SPEED}, so it
+     * accelerates hard from a standstill and fades out as the boat reaches cruise speed instead of
+     * overshooting it. Rowing is the forward input, which vanilla reports as both paddles at once;
+     * turning gives a single paddle and adds nothing.</p>
+     */
+    @Unique
+    private void dreamworld$tunnelStartThrust(Boat boat) {
+        if (!boat.getPaddleState(Boat.PADDLE_LEFT) || !boat.getPaddleState(Boat.PADDLE_RIGHT)) {
+            return;
+        }
+        Vec3 delta = boat.getDeltaMovement();
+        double shortfall = TUNNEL_TOP_SPEED - delta.dot(dreamworld$tunnelDir);
+        if (shortfall <= 0.0D) {
+            return;
+        }
+        boat.setDeltaMovement(delta.add(dreamworld$tunnelDir.scale(shortfall * TUNNEL_RAMP)));
     }
 
     // ------------------------------------------------------------- jump / climb / tunnel
@@ -233,7 +336,7 @@ public abstract class BoatDreamMixin {
                 dreamworld$leaveTunnel(boat, true);
                 dreamworld$jumpCooldown = DREAM_JUMP_COOLDOWN;
             } else {
-                dreamworld$advanceTunnel(boat);
+                dreamworld$holdTunnel(boat);
                 return;
             }
         }
@@ -249,23 +352,25 @@ public abstract class BoatDreamMixin {
     }
 
     /**
-     * Rides the boat up steps and slopes, including the case where it is already pressed into one.
+     * Rides the boat up steps and slopes.
      *
-     * <p>Two things make a blocked boat give up: the collision eats the horizontal velocity, so a
-     * speed-based check sees zero, and {@code move} only reports a collision when it actually moved,
-     * so a boat that is already pinned reports none. Both are avoided here - the direction falls back
-     * to the bow when the boat is standing still, and the prediction uses a minimum speed so the
-     * look-ahead still reaches the block in front.</p>
+     * <p>Ported from the smooth-step reference: predict the surface the hull is about to run into,
+     * make sure it really blocks the sweep path, and then push upwards with a velocity proportional
+     * to the height gap. A plain constant impulse - what this used to do - is what made a one-block
+     * step feel like grinding: the hull crawled up over a dozen ticks and slid back when the oars
+     * stopped.</p>
      *
-     * <p>Terrain is inspected before the hit: the highest surface within the step height is looked
-     * up along the direction of travel, the boat's box lifted by that gap is checked for clearance,
-     * and the climb impulse is applied. Walls taller than a step are handled by probing the box
-     * against the terrain ahead instead of relying on the collision flag.</p>
+     * <p>The assist is held for a few ticks after the obstacle leaves the probe, because the hull
+     * needs more than the tick it was detected in to actually reach the top.</p>
+     *
+     * <p>Walls taller than a step are not assistable and fall through to the climb impulse, which
+     * keeps lifting while the boat pushes into something with room above it.</p>
      */
     @Unique
     private void dreamworld$climbTerrain(Boat boat) {
         // Only while rowing forward: turning in place must not start a climb.
         if (!boat.getPaddleState(Boat.PADDLE_LEFT) || !boat.getPaddleState(Boat.PADDLE_RIGHT)) {
+            dreamworld$assistTicks = 0;
             return;
         }
         Vec3 delta = boat.getDeltaMovement();
@@ -278,25 +383,12 @@ public abstract class BoatDreamMixin {
             float yawRadians = boat.getYRot() * ((float) Math.PI / 180.0F);
             direction = new Vec3(-Mth.sin(yawRadians), 0.0D, Mth.cos(yawRadians));
         }
-        // A blocked boat has no speed, but the search still has to reach past its own nose.
-        double predictionSpeed = Math.max(speed, DREAM_STEP_BLOCKED_SPEED);
-        double lookAhead = Mth.clamp(predictionSpeed * DREAM_STEP_PREDICTION_TICKS,
-                DREAM_STEP_LOOKAHEAD_MIN, DREAM_STEP_LOOKAHEAD_MAX);
         AABB box = boat.getBoundingBox();
-        AABB scan = box.expandTowards(direction.x * lookAhead, DREAM_STEP_HEIGHT,
-                direction.z * lookAhead).inflate(0.08D, 0.0D, 0.08D);
 
         // Only ride up terrain the boat is resting on; dropping next to a wall must not catch it.
         if (boat.onGround() || delta.y > -0.08D) {
-            double supportTop = dreamworld$supportTop(boat, scan, box.minY);
-            double gap = supportTop - box.minY;
-            if (gap > 0.05D) {
-                // A step the boat fits on top of: lift it before the collision ever happens.
-                AABB lifted = box.move(0.0D, gap + 0.04D, 0.0D);
-                if (boat.level().noCollision(boat, lifted)) {
-                    dreamworld$lift(boat, delta);
-                    return;
-                }
+            if (dreamworld$stepAssist(boat, box, direction, speed)) {
+                return;
             }
         }
 
@@ -308,6 +400,164 @@ public abstract class BoatDreamMixin {
         }
     }
 
+    /**
+     * Applies the smooth step lift, or keeps the previous one running.
+     *
+     * @return whether a lift was applied
+     */
+    @Unique
+    private boolean dreamworld$stepAssist(Boat boat, AABB box, Vec3 direction, double speed) {
+        double predictionSpeed = Math.max(speed, DREAM_STEP_BLOCKED_SPEED);
+        double lookAhead = Mth.clamp(predictionSpeed * DREAM_STEP_PREDICTION_TICKS,
+                DREAM_STEP_LOOKAHEAD_MIN, DREAM_STEP_LOOKAHEAD_MAX);
+
+        OptionalDouble support = dreamworld$predictedSupportTop(boat, box, direction, lookAhead);
+        if (support.isPresent()) {
+            double targetTop = support.getAsDouble();
+            double liftHeight = targetTop - box.minY;
+            if (liftHeight > 0.05D && liftHeight <= DREAM_STEP_HEIGHT) {
+                AABB scan = box.expandTowards(direction.x * lookAhead, DREAM_STEP_HEIGHT,
+                        direction.z * lookAhead).inflate(0.08D, 0.0D, 0.08D);
+                Vec3 sweep = direction.scale(lookAhead);
+                double bestDistance = Double.MAX_VALUE;
+                boolean blocked = false;
+                for (VoxelShape shape : boat.level().getBlockCollisions(boat, scan)) {
+                    for (AABB part : shape.toAabbs()) {
+                        OptionalDouble distance = dreamworld$sweepDistance(box, part, sweep, targetTop);
+                        if (distance.isEmpty()) {
+                            continue;
+                        }
+                        if (!dreamworld$hasHeadroom(boat, box, targetTop)) {
+                            continue;
+                        }
+                        if (distance.getAsDouble() < bestDistance) {
+                            bestDistance = distance.getAsDouble();
+                            blocked = true;
+                        }
+                    }
+                }
+                if (blocked) {
+                    dreamworld$assistTicks = DREAM_STEP_HOLD_TICKS;
+                    dreamworld$lastTargetY = targetTop;
+                    dreamworld$lastDistance = bestDistance;
+                    dreamworld$applyStepLift(boat, speed, targetTop, bestDistance, lookAhead);
+                    return true;
+                }
+            }
+        }
+
+        if (dreamworld$assistTicks > 0 && dreamworld$lastTargetY > box.minY) {
+            dreamworld$assistTicks--;
+            dreamworld$applyStepLift(boat, speed, dreamworld$lastTargetY, dreamworld$lastDistance,
+                    lookAhead);
+            return true;
+        }
+        dreamworld$assistTicks = 0;
+        return false;
+    }
+
+    /**
+     * Highest surface under the swept footprint that is at most one step above the hull.
+     *
+     * <p>Bounded below as well, so a boat gliding over a drop does not treat the distant ground as
+     * its support.</p>
+     */
+    @Unique
+    private static OptionalDouble dreamworld$predictedSupportTop(Boat boat, AABB box, Vec3 direction,
+            double lookAhead) {
+        AABB footprint = box.expandTowards(direction.x * lookAhead, 0.0D, direction.z * lookAhead)
+                .inflate(0.05D, 0.0D, 0.05D);
+        AABB search = new AABB(footprint.minX, box.minY - DREAM_MAX_GROUND_DISTANCE, footprint.minZ,
+                footprint.maxX, box.minY + DREAM_STEP_HEIGHT, footprint.maxZ);
+        double highest = Double.NEGATIVE_INFINITY;
+        for (VoxelShape shape : boat.level().getBlockCollisions(boat, search)) {
+            for (AABB part : shape.toAabbs()) {
+                if (part.maxY <= box.minY + DREAM_STEP_HEIGHT && part.maxY > highest) {
+                    highest = part.maxY;
+                }
+            }
+        }
+        return highest != Double.NEGATIVE_INFINITY && box.minY - highest < DREAM_MAX_GROUND_DISTANCE
+                ? OptionalDouble.of(highest)
+                : OptionalDouble.empty();
+    }
+
+    /**
+     * Fraction of the sweep at which {@code obstacle} would be entered, if it is in the way.
+     *
+     * <p>Only obstacles that rise above the hull and stay below the target surface count: those are
+     * the ones that would stop the boat before it reached the step it is aiming at.</p>
+     */
+    @Unique
+    private static OptionalDouble dreamworld$sweepDistance(AABB movingBox, AABB obstacle, Vec3 sweep,
+            double targetTop) {
+        if (obstacle.maxY <= movingBox.minY + 0.05D || obstacle.minY >= targetTop) {
+            return OptionalDouble.empty();
+        }
+        double entryX;
+        double exitX;
+        double entryZ;
+        double exitZ;
+        if (Math.abs(sweep.x) < 1.0E-7D) {
+            if (movingBox.maxX <= obstacle.minX || movingBox.minX >= obstacle.maxX) {
+                return OptionalDouble.empty();
+            }
+            entryX = Double.NEGATIVE_INFINITY;
+            exitX = Double.POSITIVE_INFINITY;
+        } else if (sweep.x > 0.0D) {
+            entryX = (obstacle.minX - movingBox.maxX) / sweep.x;
+            exitX = (obstacle.maxX - movingBox.minX) / sweep.x;
+        } else {
+            entryX = (obstacle.maxX - movingBox.minX) / sweep.x;
+            exitX = (obstacle.minX - movingBox.maxX) / sweep.x;
+        }
+        if (Math.abs(sweep.z) < 1.0E-7D) {
+            if (movingBox.maxZ <= obstacle.minZ || movingBox.minZ >= obstacle.maxZ) {
+                return OptionalDouble.empty();
+            }
+            entryZ = Double.NEGATIVE_INFINITY;
+            exitZ = Double.POSITIVE_INFINITY;
+        } else if (sweep.z > 0.0D) {
+            entryZ = (obstacle.minZ - movingBox.maxZ) / sweep.z;
+            exitZ = (obstacle.maxZ - movingBox.minZ) / sweep.z;
+        } else {
+            entryZ = (obstacle.maxZ - movingBox.minZ) / sweep.z;
+            exitZ = (obstacle.minZ - movingBox.maxZ) / sweep.z;
+        }
+        double entry = Math.max(Math.min(entryX, exitX), Math.min(entryZ, exitZ));
+        double exit = Math.min(Math.max(entryX, exitX), Math.max(entryZ, exitZ));
+        if (entry > exit || exit < 0.0D || entry > 1.0D) {
+            return OptionalDouble.empty();
+        }
+        return OptionalDouble.of(Mth.clamp(entry, 0.0D, 1.0D));
+    }
+
+    /** {@return whether the hull fits once lifted onto {@code targetTop}} */
+    @Unique
+    private static boolean dreamworld$hasHeadroom(Boat boat, AABB box, double targetTop) {
+        double lift = targetTop - box.minY + DREAM_STEP_CLEARANCE;
+        if (lift <= 0.0D || lift > DREAM_STEP_HEIGHT + DREAM_STEP_CLEARANCE) {
+            return false;
+        }
+        return boat.level().noCollision(boat, box.move(0.0D, lift, 0.0D).deflate(0.02D));
+    }
+
+    /** Pushes the hull upwards with a velocity scaled by the height gap and the distance. */
+    @Unique
+    private static void dreamworld$applyStepLift(Boat boat, double speed, double targetTop,
+            double distance, double lookAhead) {
+        Vec3 movement = boat.getDeltaMovement();
+        AABB box = boat.getBoundingBox();
+        double heightGap = Mth.clamp(targetTop - box.minY, 0.0D, DREAM_STEP_HEIGHT);
+        double urgency = 1.0D - Mth.clamp(distance / lookAhead, 0.0D, 1.0D);
+        double speedFactor = Mth.clamp(speed / 0.28D, 0.75D, 1.5D);
+        double targetY = 0.045D + heightGap * 0.22D + urgency * 0.12D + speedFactor * 0.035D;
+        double lift = Math.min(targetY, DREAM_STEP_MAX_LIFT);
+        if (movement.y < lift) {
+            boat.setDeltaMovement(movement.x, lift, movement.z);
+        }
+    }
+
     /** Adds the climb impulse to the boat, keeping the horizontal part of its motion. */
     @Unique
     private static void dreamworld$lift(Boat boat, Vec3 delta) {
@@ -315,21 +565,6 @@ public abstract class BoatDreamMixin {
         if (delta.y < lift) {
             boat.setDeltaMovement(delta.x, lift, delta.z);
         }
-    }
-
-    /** Highest collision top in {@code scan} that is at most one step above {@code floorY}. */
-    @Unique
-    private static double dreamworld$supportTop(Boat boat, AABB scan, double floorY) {
-        double top = Double.NEGATIVE_INFINITY;
-        for (VoxelShape shape : boat.level().getBlockCollisions(boat, scan)) {
-            for (AABB part : shape.toAabbs()) {
-                if (part.maxY > floorY + 0.05D && part.maxY <= floorY + DREAM_STEP_HEIGHT
-                        && part.maxY > top) {
-                    top = part.maxY;
-                }
-            }
-        }
-        return top;
     }
 
     // ------------------------------------------------------------- graffiti tunnels
@@ -382,24 +617,86 @@ public abstract class BoatDreamMixin {
         }
     }
 
-    @Unique
-    private void dreamworld$advanceTunnel(Boat boat) {
-        dreamworld$tunnelProgress += TUNNEL_SPEED;
-        boat.fallDistance = 0.0F;
-        boat.setDeltaMovement(Vec3.ZERO);
-        if (dreamworld$tunnelProgress >= dreamworld$tunnelLength) {
-            Vec3 end = dreamworld$tunnelStart.add(dreamworld$tunnelDir.scale(dreamworld$tunnelLength));
-            boat.setPos(end.x, end.y, end.z);
-            dreamworld$leaveTunnel(boat, true);
+    /**
+     * Stops a dream boat from taking on creatures that belong to reality.
+     *
+     * <p>The two layers share one server world, so an ordinary cow or zombie wandering into the
+     * dream sits at the very same coordinates as the boat. Vanilla boards any nearby living entity
+     * into a boat that nobody drives, which would put an invisible passenger on a dreamer's boat.
+     * A dream boat only takes creatures of its own layer.</p>
+     */
+    @Redirect(method = "tick",
+            at = @At(value = "INVOKE",
+                    target = "Lnet/minecraft/world/entity/Entity;"
+                            + "startRiding(Lnet/minecraft/world/entity/Entity;)Z"))
+    private boolean dreamworld$noRealPassengers(Entity passenger, Entity vehicle) {
+        if (DreamBoatGate.isDreamBoat((Boat) (Object) this) && !DreamEntities.isDreamOnly(passenger)) {
+            return false;
+        }
+        return passenger.startRiding(vehicle);
+    }
+
+    /**
+     * Replaces the boat's own move step while it rides a tunnel.
+     *
+     * <p>On open ground the vanilla step moves the boat by its whole velocity - thrust, drift and
+     * gravity - and correcting that afterwards means the boat is placed twice per tick, which is
+     * what made it shiver. Here the step itself is replaced: only the component along the tunnel
+     * axis is taken, and the boat is placed exactly on the line in a single move. The velocity that
+     * the player built up by rowing is kept, so the next tick's thrust and friction behave exactly
+     * like open dream boating.</p>
+     */
+    @Redirect(method = "tick",
+            at = @At(value = "INVOKE",
+                    target = "Lnet/minecraft/world/entity/vehicle/Boat;"
+                            + "move(Lnet/minecraft/world/entity/MoverType;Lnet/minecraft/world/phys/Vec3;)V"))
+    private void dreamworld$tunnelMove(Boat boat, MoverType type, Vec3 motion) {
+        if (!dreamworld$inTunnel) {
+            boat.move(type, motion);
             return;
         }
+        double along = motion.dot(dreamworld$tunnelDir);
+        dreamworld$tunnelProgress = Mth.clamp(dreamworld$tunnelProgress + along, 0.0D,
+                dreamworld$tunnelLength);
+        boat.setDeltaMovement(dreamworld$tunnelDir.scale(along));
         Vec3 next = dreamworld$tunnelStart.add(dreamworld$tunnelDir.scale(dreamworld$tunnelProgress));
         boat.setPos(next.x, next.y, next.z);
+    }
+
+    /**
+     * Keeps the boat aimed down the tunnel and leaves at the far end.
+     *
+     * <p>The movement itself was already handled by {@link #dreamworld$tunnelMove}, and the rider is
+     * carried along by vanilla once the boat tick returns, so this only pins the bow and checks the
+     * end - placing the boat or the rider a second time here would be exactly the double placement
+     * that made the boat shake.</p>
+     */
+    @Unique
+    private void dreamworld$holdTunnel(Boat boat) {
+        boat.fallDistance = 0.0F;
         boat.setYRot(dreamworld$yawOf(dreamworld$tunnelDir));
-        LivingEntity rider = boat.getControllingPassenger();
-        if (rider != null) {
-            boat.positionRider(rider);
+        if (dreamworld$tunnelProgress >= dreamworld$tunnelLength) {
+            dreamworld$finishTunnel(boat);
         }
+    }
+
+    /**
+     * Leaves the tunnel at its far end.
+     *
+     * <p>Nothing is thrown anywhere: the boat arrives exactly on the far graffiti and comes to a
+     * stop there. The sideways escape belongs to leaving mid-way - using it here flung the boat six
+     * blocks off the line and dropped it onto whatever ground could be found below, which is what
+     * yanked a rider out of a tunnel that ran under the terrain.</p>
+     */
+    @Unique
+    private void dreamworld$finishTunnel(Boat boat) {
+        dreamworld$inTunnel = false;
+        dreamworld$reattachDelay = TUNNEL_REATTACH_DELAY;
+        boat.noPhysics = false;
+        boat.fallDistance = 0.0F;
+        Vec3 end = dreamworld$tunnelStart.add(dreamworld$tunnelDir.scale(dreamworld$tunnelLength));
+        boat.setPos(end.x, end.y, end.z);
+        boat.setDeltaMovement(Vec3.ZERO);
     }
 
     /**
@@ -439,8 +736,9 @@ public abstract class BoatDreamMixin {
         boat.setPos(target.x, y, target.z);
         boat.fallDistance = 0.0F;
         if (eject) {
+            // The push comes off the line sideways, but the bow keeps the tunnel heading: leaving a
+            // tunnel should not spin the boat around in the process.
             boat.setDeltaMovement(away.x * 0.25D, 0.15D, away.z * 0.25D);
-            boat.setYRot(dreamworld$yawOf(away));
         } else {
             boat.setDeltaMovement(Vec3.ZERO);
         }

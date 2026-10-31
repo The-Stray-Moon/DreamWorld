@@ -11,6 +11,7 @@ import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.animal.Rabbit;
 import net.minecraft.world.level.Level;
@@ -92,6 +93,18 @@ public class BlubEntity extends Rabbit {
         return this.entityData.get(DATA_RESTING);
     }
 
+    /**
+     * {@return whether the blub is down and therefore must not move at all}
+     *
+     * <p>Two states put it on the ground: its own rest timer, and the sleeping pose an intrusion copy
+     * is created with. The model draws both as lying, so both have to be pinned - a body that is
+     * drawn flat but still walks, hops or gets shoved reads as a bug no matter which flag caused
+     * it.</p>
+     */
+    public boolean isDown() {
+        return isResting() || getPose() == Pose.SLEEPING;
+    }
+
     private void setResting(boolean resting) {
         if (isResting() == resting) {
             return;
@@ -106,18 +119,43 @@ public class BlubEntity extends Rabbit {
             // wander off, cannot hop and cannot restart a path.
             this.noAiBeforeRest = isNoAi();
             setNoAi(true);
-            getNavigation().stop();
-            setJumping(false);
-            setDeltaMovement(Vec3.ZERO);
+            holdStill();
         } else {
             setNoAi(this.noAiBeforeRest);
         }
+    }
+
+    /**
+     * Cancels everything a downed blub could move with.
+     *
+     * <p>Movement input, the jump flag, a running path and any leftover velocity are cleared together,
+     * because each of them alone is enough to move the body: the AI can ask for a hop without any
+     * input, and an entity that was pushed carries that push into its next tick.</p>
+     */
+    private void holdStill() {
+        this.jumping = false;
+        this.xxa = 0.0F;
+        this.zza = 0.0F;
+        setJumping(false);
+        setDeltaMovement(Vec3.ZERO);
+        getNavigation().stop();
     }
 
     @Override
     public void tick() {
         super.tick();
         if (level().isClientSide) {
+            return;
+        }
+        if (isDown()) {
+            // A resting blub still lays clay; only movement is off.
+            holdStill();
+            tickClay();
+            if (isResting() && --this.restTicks <= 0) {
+                setResting(false);
+                this.stillTicks = 0;
+                this.nextRestDelay = nextRestDelay();
+            }
             return;
         }
         boolean moved = hasLastPos && horizontalMoved();
@@ -136,7 +174,7 @@ public class BlubEntity extends Rabbit {
     }
 
     /**
-     * A resting blub does not walk anywhere.
+     * A downed blub does not walk anywhere.
      *
      * <p>Zeroing the delta after {@code super.tick()} would be too late, the body has already been
      * moved by then; cutting the movement input here is what actually pins it to the ground while it
@@ -144,11 +182,11 @@ public class BlubEntity extends Rabbit {
      */
     @Override
     public void travel(Vec3 input) {
-        super.travel(isResting() ? Vec3.ZERO : input);
+        super.travel(isDown() ? Vec3.ZERO : input);
     }
 
     /**
-     * A resting blub does not hop either.
+     * A downed blub does not hop either.
      *
      * <p>Rabbit AI starts a jump whenever its move control wants to go somewhere, and that impulse is
      * applied in {@code aiStep} before {@code travel}, so cutting the travel input alone would leave
@@ -156,11 +194,26 @@ public class BlubEntity extends Rabbit {
      */
     @Override
     public void jumpFromGround() {
-        if (isResting()) {
+        if (isDown()) {
             setJumping(false);
             return;
         }
         super.jumpFromGround();
+    }
+
+    /** A downed blub must not be shoved around by players or other mobs. */
+    @Override
+    public boolean isPushable() {
+        return !isDown() && super.isPushable();
+    }
+
+    /** The other half of push immunity: a push is a velocity write, so it is refused here too. */
+    @Override
+    public void push(double x, double y, double z) {
+        if (isDown()) {
+            return;
+        }
+        super.push(x, y, z);
     }
 
     private void tickClay() {
@@ -176,17 +229,18 @@ public class BlubEntity extends Rabbit {
     }
 
     /**
-     * A resting blub runs no AI step at all.
+     * A downed blub runs no AI step at all.
      *
-     * <p>{@code aiStep} is where the goals, the move control, the jump control and {@code travel} all
-     * live - and the jump impulse is applied there, before {@code travel} ever sees the input. Cutting
-     * the input alone left the blub hopping on the spot, so the whole step is skipped while it lies
-     * down. The pose is synced separately, so the client keeps drawing it lying down.</p>
+     * <p>{@code aiStep} is where the goals, the move control, the jump control, gravity and
+     * {@code travel} all live - and the jump impulse is applied there, before {@code travel} ever
+     * sees the input. Cutting the input alone left the blub hopping on the spot, so the whole step is
+     * skipped while it lies down. The pose is synced separately, so the client keeps drawing it lying
+     * down.</p>
      */
     @Override
     public void aiStep() {
-        if (isResting()) {
-            setDeltaMovement(Vec3.ZERO);
+        if (isDown()) {
+            holdStill();
             return;
         }
         super.aiStep();
@@ -198,25 +252,13 @@ public class BlubEntity extends Rabbit {
      * <p>The state is synced so the client can play the matching animation, and the blub itself is
      * held in place while down: navigation is dropped, AI and its physics step are skipped, and the
      * motion is zeroed, which is what the {@code LIE_DOWN} / {@code LYING} / {@code GET_UP} clips are
-     * drawn for.</p>
+     * drawn for. The timer itself is run by {@link #tick()}, together with the hold.</p>
      *
      * <p>Idleness is measured on the position, not on the navigation state: the AI keeps trying to
-     * path while the blub is held down, so a navigation check would end the rest immediately. The
-     * rest itself ends on its timer only - a leftover slide from before it lay down must not cancel
-     * it. A blub in the air never starts resting, because a skipped AI step also skips gravity.</p>
+     * path while the blub is held down, so a navigation check would end the rest immediately. A blub
+     * in the air never starts resting, because a skipped AI step also skips gravity.</p>
      */
     private void tickRest(boolean moved) {
-        if (isResting()) {
-            getNavigation().stop();
-            setJumping(false);
-            setDeltaMovement(Vec3.ZERO);
-            if (--this.restTicks <= 0) {
-                setResting(false);
-                this.stillTicks = 0;
-                this.nextRestDelay = nextRestDelay();
-            }
-            return;
-        }
         if (moved || !onGround()) {
             this.stillTicks = 0;
             return;

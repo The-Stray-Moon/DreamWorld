@@ -35,10 +35,10 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 public final class DreamVisuals {
     /** Hard cap on the number of graffiti pairs that are drawn as tunnels. */
     private static final int MAX_TUNNEL_PAIRS = 64;
-    /** Tunnels whose middle point is farther away than this are not drawn. */
+    /** A tunnel whose segment comes closer than this to the camera is drawn. */
     private static final double TUNNEL_VIEW_RANGE = 128.0D;
     /** Half width of a tunnel ribbon in blocks. */
-    private static final float TUNNEL_HALF_WIDTH = 0.06F;
+    private static final float TUNNEL_HALF_WIDTH = 0.10F;
     private static final float TUNNEL_RED = 0.55F;
     private static final float TUNNEL_GREEN = 0.8F;
     private static final float TUNNEL_BLUE = 1.0F;
@@ -102,27 +102,21 @@ public final class DreamVisuals {
             return;
         }
         Vec3 eye = camera.getPosition();
+        // The ribbon is a screen-space billboard: one side direction for the whole pass, taken from
+        // the camera. The previous per-segment cross product collapsed to zero whenever the camera
+        // sat on the line - which is exactly where a rider is - so the tunnel being ridden was the
+        // one that disappeared.
+        Vec3 side = new Vec3(camera.getLeftVector()).scale(TUNNEL_HALF_WIDTH);
         double viewRangeSqr = TUNNEL_VIEW_RANGE * TUNNEL_VIEW_RANGE;
         List<float[]> ribbons = new ArrayList<>(tunnels.size());
         for (TunnelEdge tunnel : tunnels) {
             Vec3 from = Vec3.atCenterOf(tunnel.from());
             Vec3 to = Vec3.atCenterOf(tunnel.to());
-            Vec3 middle = from.add(to).scale(0.5D);
-            if (eye.distanceToSqr(middle) > viewRangeSqr) {
+            // Cull by the distance to the whole segment: a long tunnel can have its middle far away
+            // while one of its mouths is right in front of the player.
+            if (distanceToSegmentSqr(eye, from, to) > viewRangeSqr) {
                 continue;
             }
-            Vec3 direction = to.subtract(from);
-            double lengthSqr = direction.lengthSqr();
-            if (lengthSqr < 1.0E-6D) {
-                continue;
-            }
-            direction = direction.scale(1.0D / Math.sqrt(lengthSqr));
-            // Billboarding the ribbon towards the camera keeps the tunnel readable from any angle.
-            Vec3 side = direction.cross(eye.subtract(middle));
-            if (side.lengthSqr() < 1.0E-6D) {
-                continue;
-            }
-            side = side.normalize().scale(TUNNEL_HALF_WIDTH);
             Vec3 a = from.add(side);
             Vec3 b = from.subtract(side);
             Vec3 c = to.subtract(side);
@@ -142,6 +136,8 @@ public final class DreamVisuals {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.disableCull();
+        // Tunnels run straight through terrain, so they have to be readable through it as well.
+        RenderSystem.disableDepthTest();
         RenderSystem.depthMask(false);
         Tesselator tesselator = Tesselator.getInstance();
         BufferBuilder buffer = tesselator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
@@ -153,6 +149,7 @@ public final class DreamVisuals {
         }
         BufferUploader.drawWithShader(buffer.buildOrThrow());
         RenderSystem.depthMask(true);
+        RenderSystem.enableDepthTest();
         RenderSystem.enableCull();
         RenderSystem.disableBlend();
     }

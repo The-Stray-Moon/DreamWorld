@@ -9,6 +9,7 @@
     "DreamMiningMixin",
     "DreamSuffocationMixin",
     "DreamHitboxMixin",
+    "DreamVehicleMixin",
     "DreamEntityTrackingMixin"
   ],
   "client": [],
