@@ -2,6 +2,9 @@ package cc.sighs.dreamworld.item;
 
 import java.util.ArrayList;
 import java.util.List;
+import cc.sighs.dreamworld.dream.DreamIntrusion;
+import cc.sighs.dreamworld.dream.DreamManager;
+import cc.sighs.dreamworld.net.DWPayloads;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -22,6 +25,7 @@ import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * Dream alloy wand: charged aimed blast at the crosshair.
@@ -40,6 +44,10 @@ public class DreamWandItem extends Item {
     /** How far the crosshair ray reaches, in blocks. */
     public static final double RANGE = 32.0D;
     public static final int COOLDOWN_TICKS = 30;
+    /** Cherry petals spawned per block of blast radius. */
+    private static final int PETALS_PER_RADIUS = 12;
+    /** How far past the blast the petal packet is sent, in blocks. */
+    private static final double PARTICLE_RANGE = 32.0D;
 
     public DreamWandItem(Item.Properties properties) {
         super(properties);
@@ -80,8 +88,12 @@ public class DreamWandItem extends Item {
 
         Vec3 from = player.getEyePosition(1.0F);
         Vec3 to = from.add(player.getLookAngle().scale(RANGE));
-        BlockHitResult hit = level.clip(
-                new ClipContext(from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
+        // The dream layer is not the real one: clipping against the server's chunks would put the
+        // blast where the crosshair is not, or send it flying to the end of the ray.
+        BlockHitResult hit = DreamManager.isDreaming(player)
+                ? DreamIntrusion.clipDream(serverLevel, from, to)
+                : level.clip(new ClipContext(from, to, ClipContext.Block.COLLIDER,
+                        ClipContext.Fluid.NONE, player));
         Vec3 target = hit.getLocation();
 
         playBlastEffects(serverLevel, target, radius);
@@ -104,11 +116,20 @@ public class DreamWandItem extends Item {
     /**
      * Plays the sound and the particles of a vanilla blast without creating an explosion: no entity
      * is ever hurt and no block is destroyed by the effect itself.
+     *
+     * <p>The blast is finished with a burst of cherry petals that flies outwards from the centre.
+     * Vanilla's particle packet cannot express that - it gives every particle a random velocity
+     * unrelated to its spawn offset - so the burst is sent as its own payload and spawned by each
+     * client radially.</p>
      */
     private static void playBlastEffects(ServerLevel level, Vec3 target, float radius) {
         level.playSound(null, target.x, target.y, target.z, SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS,
                 4.0F, (1.0F + (level.random.nextFloat() - level.random.nextFloat()) * 0.2F) * 0.7F);
         ParticleOptions particle = radius < 2.0F ? ParticleTypes.EXPLOSION : ParticleTypes.EXPLOSION_EMITTER;
         level.sendParticles(particle, target.x, target.y, target.z, 1, 0.0D, 0.0D, 0.0D, 0.0D);
+        PacketDistributor.sendToPlayersNear(level, null, target.x, target.y, target.z,
+                radius + PARTICLE_RANGE,
+                new DWPayloads.BlastParticlesPayload(target.x, target.y, target.z, radius,
+                        PETALS_PER_RADIUS * Mth.ceil(radius)));
     }
 }

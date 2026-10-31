@@ -14,6 +14,8 @@ import cc.sighs.dreamworld.item.DreamSwordItem;
 import cc.sighs.dreamworld.item.DreamTeaItem;
 import cc.sighs.dreamworld.item.DreamTier;
 import cc.sighs.dreamworld.item.DreamWandItem;
+import net.minecraft.core.particles.ParticleType;
+import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -58,6 +60,8 @@ public final class DWRegistry {
             DeferredRegister.create(Registries.MOB_EFFECT, DreamWorldNeoForge121.MOD_ID);
     public static final DeferredRegister<CreativeModeTab> TABS =
             DeferredRegister.create(Registries.CREATIVE_MODE_TAB, DreamWorldNeoForge121.MOD_ID);
+    public static final DeferredRegister<ParticleType<?>> PARTICLE_TYPES =
+            DeferredRegister.create(Registries.PARTICLE_TYPE, DreamWorldNeoForge121.MOD_ID);
 
     // ------------------------------------------------------------------ items
 
@@ -130,6 +134,18 @@ public final class DWRegistry {
 
     public static final DeferredHolder<MobEffect, DreamWalkEffect> DREAM_WALK =
             EFFECTS.register("dream_walk", DreamWalkEffect::new);
+
+    // -------------------------------------------------------------- particles
+
+    /**
+     * A cherry petal that honours the velocity it is spawned with.
+     *
+     * <p>Vanilla {@code CHERRY_LEAVES} ignores the speed arguments and only ever drifts on its own
+     * wind, so it cannot be thrown outwards by anything. This type exists so the wand blast can send
+     * petals flying away from the centre.</p>
+     */
+    public static final DeferredHolder<ParticleType<?>, SimpleParticleType> DREAM_PETAL =
+            PARTICLE_TYPES.register("dream_petal", () -> new SimpleParticleType(false));
 
     // ---------------------------------------------------------- creative tab
 

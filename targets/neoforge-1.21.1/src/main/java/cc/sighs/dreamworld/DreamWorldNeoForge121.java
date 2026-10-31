@@ -13,6 +13,7 @@ public final class DreamWorldNeoForge121 {
         DWRegistry.BLOCK_ENTITIES.register(modBus);
         DWRegistry.ENTITIES.register(modBus);
         DWRegistry.EFFECTS.register(modBus);
+        DWRegistry.PARTICLE_TYPES.register(modBus);
         DWRegistry.TABS.register(modBus);
     }
 }

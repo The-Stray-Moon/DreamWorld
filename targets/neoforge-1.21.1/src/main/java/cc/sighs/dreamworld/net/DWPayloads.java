@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -97,6 +98,58 @@ public final class DWPayloads {
         }
     }
 
+    /**
+     * Asks the clients to leave a petal silhouette of a creature that just crossed the mirror.
+     *
+     * <p>The shape cannot be computed on the server - the model lives in the client renderer - so the
+     * payload only carries what the client needs to rebuild it: the entity type, where it stood and
+     * how it was turned.</p>
+     */
+    public record PetalShapePayload(ResourceLocation entityType, double x, double y, double z,
+            float yRot, int count) implements CustomPacketPayload {
+        public static final Type<PetalShapePayload> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath(DreamWorldNeoForge121.MOD_ID, "petal_shape"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, PetalShapePayload> STREAM_CODEC =
+                StreamCodec.composite(ResourceLocation.STREAM_CODEC, PetalShapePayload::entityType,
+                        ByteBufCodecs.DOUBLE, PetalShapePayload::x,
+                        ByteBufCodecs.DOUBLE, PetalShapePayload::y,
+                        ByteBufCodecs.DOUBLE, PetalShapePayload::z,
+                        ByteBufCodecs.FLOAT, PetalShapePayload::yRot,
+                        ByteBufCodecs.VAR_INT, PetalShapePayload::count,
+                        PetalShapePayload::new);
+
+        @Override
+        public Type<PetalShapePayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * A petal burst for the wand blast.
+     *
+     * <p>Vanilla's {@code ClientboundLevelParticlesPacket} gives every particle a gaussian velocity
+     * that is unrelated to where it spawned, which reads as a cloud. The burst is therefore a custom
+     * payload: the client spawns the petals itself, each one flying away from the centre along its
+     * own spawn direction.</p>
+     */
+    public record BlastParticlesPayload(double x, double y, double z, float radius, int count)
+            implements CustomPacketPayload {
+        public static final Type<BlastParticlesPayload> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath(DreamWorldNeoForge121.MOD_ID, "blast_particles"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, BlastParticlesPayload> STREAM_CODEC =
+                StreamCodec.composite(ByteBufCodecs.DOUBLE, BlastParticlesPayload::x,
+                        ByteBufCodecs.DOUBLE, BlastParticlesPayload::y,
+                        ByteBufCodecs.DOUBLE, BlastParticlesPayload::z,
+                        ByteBufCodecs.FLOAT, BlastParticlesPayload::radius,
+                        ByteBufCodecs.VAR_INT, BlastParticlesPayload::count,
+                        BlastParticlesPayload::new);
+
+        @Override
+        public Type<BlastParticlesPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Whether this player currently has a dream alloy spear anchored somewhere. */
     public record AnchorStatePayload(boolean bound) implements CustomPacketPayload {
         public static final Type<AnchorStatePayload> TYPE =
@@ -152,6 +205,14 @@ public final class DWPayloads {
                         }));
         registrar.playToClient(DreamersPayload.TYPE, DreamersPayload.STREAM_CODEC,
                 new DirectionalPayloadHandler<>(DWClientPayloadHandler::handleDreamers,
+                        (payload, context) -> {
+                        }));
+        registrar.playToClient(BlastParticlesPayload.TYPE, BlastParticlesPayload.STREAM_CODEC,
+                new DirectionalPayloadHandler<>(DWClientPayloadHandler::handleBlastParticles,
+                        (payload, context) -> {
+                        }));
+        registrar.playToClient(PetalShapePayload.TYPE, PetalShapePayload.STREAM_CODEC,
+                new DirectionalPayloadHandler<>(DWClientPayloadHandler::handlePetalShape,
                         (payload, context) -> {
                         }));
         registrar.playToClient(AnchorStatePayload.TYPE, AnchorStatePayload.STREAM_CODEC,

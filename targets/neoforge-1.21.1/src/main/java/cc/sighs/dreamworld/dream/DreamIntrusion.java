@@ -2,14 +2,22 @@ package cc.sighs.dreamworld.dream;
 
 import cc.sighs.dreamworld.DWRegistry;
 import cc.sighs.dreamworld.block.DreamGraffitiBlock;
+import cc.sighs.dreamworld.net.DWPayloads;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * Dream intrusion, expressed as dream patch edits.
@@ -25,6 +33,14 @@ import net.minecraft.world.level.block.state.BlockState;
  * looks.</p>
  */
 public final class DreamIntrusion {
+    /** Step length of the dream ray cast, in blocks. */
+    private static final double RAY_STEP = 0.2D;
+    private static final double RAY_EPSILON = 1.0E-6D;
+    /** Petals used to draw the silhouette of a transferred creature. */
+    private static final int PETAL_SILHOUETTE = 96;
+    /** How far the petal silhouette is sent, in blocks. */
+    private static final double PETAL_RANGE = 64.0D;
+
     private DreamIntrusion() {
     }
 
@@ -87,6 +103,41 @@ public final class DreamIntrusion {
     }
 
     /**
+     * Ray-casts the dream layer, which the server has no {@code BlockGetter} for.
+     *
+     * <p>{@code Level#clip} walks the real chunks, so a dreamer aiming at the dream floor would often
+     * hit nothing at all and the blast would land far away from the crosshair. The ray is therefore
+     * marched along its own length and tested against the state each position shows on the dream
+     * side: the patch when there is one, the real block otherwise.</p>
+     *
+     * @return the first dream block the ray enters, or a miss at {@code to}
+     */
+    public static BlockHitResult clipDream(ServerLevel level, Vec3 from, Vec3 to) {
+        Vec3 direction = to.subtract(from);
+        double distance = direction.length();
+        if (distance < RAY_EPSILON) {
+            return BlockHitResult.miss(to, Direction.UP, BlockPos.containing(to));
+        }
+        int steps = Math.max(1, Mth.ceil(distance / RAY_STEP));
+        for (int step = 1; step <= steps; step++) {
+            Vec3 point = from.lerp(to, (double) step / steps);
+            BlockPos pos = BlockPos.containing(point);
+            BlockState state = dreamState(level, pos);
+            if (state.isAir()) {
+                continue;
+            }
+            VoxelShape shape = state.getCollisionShape(level, pos);
+            if (shape.isEmpty() || !shape.bounds().move(pos).contains(point)) {
+                continue;
+            }
+            Direction face = Direction.getNearest(-direction.x, -direction.y, -direction.z);
+            return new BlockHitResult(point, face, pos, false);
+        }
+        return BlockHitResult.miss(to, Direction.getNearest(direction.x, direction.y, direction.z),
+                BlockPos.containing(to));
+    }
+
+    /**
      * The state the server should mine at {@code pos} for {@code player}.
      *
      * <p>Vanilla reads the real chunk while digging, but a dreamer sees the patched dream layer and
@@ -135,6 +186,10 @@ public final class DreamIntrusion {
         }
         boolean onDreamSide = DreamEntities.isDreamOnly(creature);
         BlockPos target = DreamManager.intrusionTarget(actor, creature.blockPosition());
+        // The creature is about to vanish, so the observers of its own layer are told to leave a
+        // petal silhouette where it stood. They rebuild it from the model, which only exists on the
+        // client side.
+        spawnPetalSilhouette(level, creature, onDreamSide);
         Entity copy = DreamEntities.intrudedCopy(level, creature, target, !onDreamSide);
         if (copy != null) {
             if (onDreamSide) {
@@ -144,6 +199,22 @@ public final class DreamIntrusion {
             creature.discard();
         }
         DreamEntities.syncAll(level);
+    }
+
+    /** Sends the petal-silhouette request to the players that could see the creature. */
+    private static void spawnPetalSilhouette(ServerLevel level, Entity creature, boolean onDreamSide) {
+        DWPayloads.PetalShapePayload payload = new DWPayloads.PetalShapePayload(
+                BuiltInRegistries.ENTITY_TYPE.getKey(creature.getType()),
+                creature.getX(), creature.getY(), creature.getZ(), creature.getYRot(), PETAL_SILHOUETTE);
+        double rangeSqr = PETAL_RANGE * PETAL_RANGE;
+        for (ServerPlayer nearby : level.players()) {
+            if (DreamManager.isDreaming(nearby) != onDreamSide) {
+                continue;
+            }
+            if (nearby.distanceToSqr(creature) <= rangeSqr) {
+                PacketDistributor.sendToPlayer(nearby, payload);
+            }
+        }
     }
 
     /** Alias kept for the tool hooks: the creature is moved to sleep, not killed. */
