@@ -6,12 +6,12 @@ import cc.sighs.dreamworld.block.DreamGraffitiBlock;
 import cc.sighs.dreamworld.dream.DreamIntrusion;
 import cc.sighs.dreamworld.dream.DreamManager;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
@@ -36,23 +36,30 @@ public final class DreamToolEvents {
                 || !(event.getLevel() instanceof ServerLevel level)) {
             return;
         }
-        if (!isHoldingTool(player)) {
+        if (!DreamIntrusion.isHoldingTool(player)) {
             return;
         }
         BlockPos pos = event.getPos();
         if (event.getLevel().getBlockState(pos).getBlock() instanceof DreamGraffitiBlock) {
             return;
         }
-        // While dreaming the break only exists in the dream patch and the block is carried into the
-        // real world at the intrusion target; in the real world the block is removed without loot
-        // and the recorder keeps its old state for the dream layer.
-        DreamIntrusion.breakBlock(player, level, pos);
+        // The break is always replaced by an intrusion: a dream-side break carries the dream block
+        // into reality, a real-side break carries the real block into the dream. Cancelling keeps
+        // vanilla from dropping the block or spawning experience while the intrusion runs.
         event.setCanceled(true);
-        if (!DreamManager.isDreaming(player)) {
-            // Keep the pre-break state for the dream layer explicitly: the block is moved there.
-            cc.sighs.dreamworld.dream.DreamPatches.get(level).recordRealEdit(level, pos,
-                    level.getBlockState(pos));
-            level.removeBlock(pos, false);
+        if (DreamManager.isDreaming(player)) {
+            // Only the patch changes, and the patch resend happens at the end of this tick anyway.
+            DreamIntrusion.breakBlock(player, level, pos);
+            return;
+        }
+        // NeoForge sends the "the block is still there" correction packet right after this handler
+        // returns. Removing the block inline would be painted over by that packet, so the removal
+        // waits one tick and stays the last word for the client.
+        MinecraftServer server = player.getServer();
+        if (server == null) {
+            DreamIntrusion.breakBlock(player, level, pos);
+        } else {
+            server.execute(() -> DreamIntrusion.breakBlock(player, level, pos));
         }
     }
 
@@ -83,25 +90,13 @@ public final class DreamToolEvents {
 
     /** Transfers a batch of blocks, e.g. everything the wand explosion caught. */
     static void handleBlocksBroken(ServerPlayer player, ServerLevel level, Iterable<BlockPos> positions) {
-        if (!isHoldingTool(player)) {
+        if (!DreamIntrusion.isHoldingTool(player)) {
             return;
         }
         for (BlockPos pos : positions) {
-            BlockState state = level.getBlockState(pos);
-            if (state.isAir() || state.getBlock() instanceof DreamGraffitiBlock) {
-                continue;
-            }
+            // The guard is inside DreamIntrusion: it reads the layer the player stands on and skips
+            // air as well as graffiti.
             DreamIntrusion.breakBlock(player, level, pos);
-            if (!DreamManager.isDreaming(player)) {
-                level.removeBlock(pos, false);
-            }
         }
-    }
-
-    private static boolean isHoldingTool(ServerPlayer player) {
-        ItemStack main = player.getMainHandItem();
-        return main.is(DWRegistry.DREAM_ALLOY_SWORD.get())
-                || main.is(DWRegistry.DREAM_ALLOY_SHOVEL.get())
-                || main.is(DWRegistry.DREAM_ALLOY_WAND.get());
     }
 }

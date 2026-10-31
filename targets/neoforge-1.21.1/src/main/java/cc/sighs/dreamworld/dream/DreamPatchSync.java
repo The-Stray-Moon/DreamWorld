@@ -40,8 +40,10 @@ public final class DreamPatchSync {
     public static void sendChunk(ServerPlayer player, ServerLevel level, ChunkPos chunk) {
         Map<BlockPos, BlockState> patch = DreamPatches.get(level).forChunk(chunk);
         List<DWPayloads.PatchEntry> entries = new ArrayList<>(patch.size());
-        patch.forEach((pos, state) ->
-                entries.add(new DWPayloads.PatchEntry(pos.asLong(), NbtUtils.writeBlockState(state))));
+        // The real state is read here, before the client is told anything: it is what the overlay
+        // hides, and the client has no way to observe it on its own.
+        patch.forEach((pos, state) -> entries.add(new DWPayloads.PatchEntry(pos.asLong(),
+                NbtUtils.writeBlockState(state), NbtUtils.writeBlockState(level.getBlockState(pos)))));
         PacketDistributor.sendToPlayer(player, new DWPayloads.DreamPatchPayload(chunk.toLong(), entries));
     }
 

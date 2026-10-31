@@ -37,8 +37,12 @@ public final class DreamClientPatches {
         }
         Map<BlockPos, BlockState> patch = new HashMap<>();
         for (DWPayloads.PatchEntry entry : entries) {
-            patch.put(BlockPos.of(entry.pos()),
-                    NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK), entry.state()));
+            BlockPos pos = BlockPos.of(entry.pos());
+            patch.put(pos, NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK), entry.state()));
+            // The real state comes from the server: the position already holds the dream block (or a
+            // prediction of a break) by now, so reading it here would cache a guess.
+            REAL_STATES.put(pos.immutable(),
+                    NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK), entry.realState()));
         }
         PATCHES.put(chunkLong, patch);
         if (DreamClientState.isDreaming()) {
@@ -68,8 +72,11 @@ public final class DreamClientPatches {
     }
 
     /**
-     * Called after the server applied a block update: the fresh real state is remembered and the
-     * dream state is put back on top.
+     * Called after the server applied a block update: the dream state is put back on top.
+     *
+     * <p>The real state cached in {@link #REAL_STATES} is not touched here. It arrives from the
+     * server with the patch, because the block update itself may be a local prediction of a break
+     * (the dreamer's own mining) and would poison the cache that {@link #restoreAll} restores.</p>
      */
     public static void reassert(BlockPos pos) {
         if (!DreamClientState.isDreaming() || applying) {
@@ -91,7 +98,6 @@ public final class DreamClientPatches {
                 instanceof cc.sighs.dreamworld.block.DreamGraffitiBlock) {
             return;
         }
-        REAL_STATES.put(pos.immutable(), level.getBlockState(pos));
         if (!level.getBlockState(pos).equals(dream)) {
             set(level, pos, dream);
         }
@@ -115,10 +121,7 @@ public final class DreamClientPatches {
                     instanceof cc.sighs.dreamworld.block.DreamGraffitiBlock) {
                 return;
             }
-            if (!applying) {
-                // The first observation is the real state; later passes may already see the patch.
-                REAL_STATES.putIfAbsent(pos.immutable(), level.getBlockState(pos));
-            }
+            // The real state is not sampled here: it came with the patch (see accept).
             set(level, pos, state);
         });
     }
