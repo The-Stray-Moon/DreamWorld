@@ -18,8 +18,8 @@ import net.neoforged.neoforge.client.event.RenderLivingEvent;
  * Client-side dream visibility.
  *
  * <p>A dreamer sees no ordinary creature at all (players are kept so several dreamers can meet),
- * the dream rabbit being the only wildlife of the dream layer. Which rabbit reaches which client is
- * decided on the server, so this class only hides the ordinary mobs and drops the rabbits that are
+ * the dream blub being the only wildlife of the dream layer. Which blub reaches which client is
+ * decided on the server, so this class only hides the ordinary mobs and drops the blubs that are
  * still loaded when the dream ends.</p>
  */
 @EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID, value = Dist.CLIENT)

@@ -62,6 +62,19 @@ public final class DreamClientPatches {
         return !INTRUDED.isEmpty() && INTRUDED.contains(pos);
     }
 
+    /**
+     * Forgets every patch of the previous session.
+     *
+     * <p>The cache is static, so without this a client that disconnects while dreaming would apply
+     * the old world's overlay to the next one on join - and a patch that turns the ground into air
+     * under the player is exactly how a body ends up buried.</p>
+     */
+    public static void reset() {
+        PATCHES.clear();
+        REAL_STATES.clear();
+        INTRUDED.clear();
+    }
+
     /** Applies every known patch; called when the dream starts. */
     public static void applyAll() {
         for (long chunk : List.copyOf(PATCHES.keySet())) {

@@ -72,4 +72,19 @@ public final class DreamClientState {
         java.util.Set<java.util.UUID> current = dreamers;
         return !current.isEmpty() && current.contains(id);
     }
+
+    /**
+     * Drops every piece of dream state.
+     *
+     * <p>All of it is session state that arrives from the server, so a client that keeps it across a
+     * disconnect starts the next world believing whatever the previous one said - a stale "dreaming"
+     * flag would apply an old patch set to the new world before the server ever speaks.</p>
+     */
+    public static void reset() {
+        dreaming = false;
+        anchorBound = false;
+        graffiti = List.of();
+        dreamers = java.util.Set.of();
+        dreamEntityIds = java.util.Set.of();
+    }
 }

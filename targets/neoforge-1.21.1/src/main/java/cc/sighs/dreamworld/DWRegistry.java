@@ -4,7 +4,7 @@ import cc.sighs.dreamworld.block.DreamGraffitiBlock;
 import cc.sighs.dreamworld.block.DreamGraffitiBlockEntity;
 import cc.sighs.dreamworld.effect.DreamWalkEffect;
 import cc.sighs.dreamworld.entity.DreamClayEntity;
-import cc.sighs.dreamworld.entity.DreamRabbitEntity;
+import cc.sighs.dreamworld.entity.BlubEntity;
 import cc.sighs.dreamworld.entity.DreamSpearEntity;
 import cc.sighs.dreamworld.item.DreamGraffitiItem;
 import cc.sighs.dreamworld.item.DreamCrystalItem;
@@ -116,18 +116,18 @@ public final class DWRegistry {
                             DreamClayEntity::new, MobCategory.MISC)
                     .sized(0.4F, 0.4F).clientTrackingRange(10).updateInterval(2).build("dream_clay"));
 
-    public static final DeferredHolder<EntityType<?>, EntityType<DreamRabbitEntity>> DREAM_RABBIT =
-            ENTITIES.register("dream_rabbit", () -> EntityType.Builder.<DreamRabbitEntity>of(
-                            DreamRabbitEntity::new, MobCategory.CREATURE)
-                    .sized(0.4F, 0.5F).clientTrackingRange(8).build("dream_rabbit"));
+    public static final DeferredHolder<EntityType<?>, EntityType<BlubEntity>> BLUB =
+            ENTITIES.register("blub", () -> EntityType.Builder.<BlubEntity>of(
+                            BlubEntity::new, MobCategory.CREATURE)
+                    .sized(0.65F, 0.6F).clientTrackingRange(8).build("blub"));
 
     public static final DeferredHolder<EntityType<?>, EntityType<DreamSpearEntity>> DREAM_SPEAR_ENTITY =
             ENTITIES.register("dream_spear", () -> EntityType.Builder.<DreamSpearEntity>of(
                             DreamSpearEntity::new, MobCategory.MISC)
                     .sized(0.5F, 0.5F).clientTrackingRange(10).updateInterval(2).build("dream_spear"));
 
-    public static final DeferredItem<DeferredSpawnEggItem> DREAM_RABBIT_SPAWN_EGG =
-            ITEMS.register("dream_rabbit_spawn_egg", () -> new DeferredSpawnEggItem(DREAM_RABBIT::get,
+    public static final DeferredItem<DeferredSpawnEggItem> BLUB_SPAWN_EGG =
+            ITEMS.register("blub_spawn_egg", () -> new DeferredSpawnEggItem(BLUB::get,
                     0x3A6EDC, 0xBFE3FF, new Item.Properties()));
 
     // ---------------------------------------------------------------- effects
@@ -164,7 +164,7 @@ public final class DWRegistry {
                         output.accept(DREAM_ALLOY_WAND.get());
                         output.accept(DREAM_ALLOY_SPEAR.get());
                         output.accept(DREAM_GRAFFITI_ITEM.get());
-                        output.accept(DREAM_RABBIT_SPAWN_EGG.get());
+                        output.accept(BLUB_SPAWN_EGG.get());
                     })
                     .build());
 }

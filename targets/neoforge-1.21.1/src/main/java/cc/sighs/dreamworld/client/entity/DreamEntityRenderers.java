@@ -12,9 +12,9 @@ import net.neoforged.neoforge.client.event.EntityRenderersEvent;
  * Client-only renderers for the dream entities.
  *
  * <p>Dream clay is drawn with the vanilla thrown item renderer, the spear has its own renderer so an
- * anchor on the other layer can be shown as a ghost, and the dream rabbit reuses the vanilla rabbit
- * renderer and textures. The rabbit attributes are registered by
- * {@link cc.sighs.dreamworld.entity.DreamRabbitEntity} because that event fires on both sides.</p>
+ * anchor on the other layer can be shown as a ghost, and the jelly rabbit has its own blocky model
+ * with a baked layer. The rabbit attributes are registered by
+ * {@link cc.sighs.dreamworld.entity.BlubEntity} because that event fires on both sides.</p>
  */
 @EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID, value = Dist.CLIENT)
 public final class DreamEntityRenderers {
@@ -25,6 +25,11 @@ public final class DreamEntityRenderers {
     public static void registerEntityRenderers(EntityRenderersEvent.RegisterRenderers event) {
         event.registerEntityRenderer(DWRegistry.DREAM_CLAY_ENTITY.get(), ThrownItemRenderer::new);
         event.registerEntityRenderer(DWRegistry.DREAM_SPEAR_ENTITY.get(), DreamSpearRenderer::new);
-        event.registerEntityRenderer(DWRegistry.DREAM_RABBIT.get(), DreamRabbitRenderer::new);
+        event.registerEntityRenderer(DWRegistry.BLUB.get(), BlubRenderer::new);
+    }
+
+    @SubscribeEvent
+    public static void registerLayerDefinitions(EntityRenderersEvent.RegisterLayerDefinitions event) {
+        event.registerLayerDefinition(BlubModel.LAYER, BlubModel::createBodyLayer);
     }
 }
