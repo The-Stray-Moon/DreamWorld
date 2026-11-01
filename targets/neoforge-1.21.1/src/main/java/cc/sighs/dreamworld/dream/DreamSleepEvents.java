@@ -2,6 +2,7 @@ package cc.sighs.dreamworld.dream;
 
 import cc.sighs.dreamworld.DWRegistry;
 import cc.sighs.dreamworld.DreamWorldNeoForge121;
+import cc.sighs.dreamworld.config.DreamServerConfig;
 import cc.sighs.dreamworld.entity.DreamClayEntity;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -34,26 +35,17 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
  * {@link CanContinueSleepingEvent} so vanilla does not wake the sleeper up on the next tick.</p>
  *
  * <p>A player carrying the {@code dream_walk} effect may use the gesture at any time of the day.
- * Such a player lies still for {@link #DREAM_ENTRY_DELAY} ticks first and only then slips into the
- * mirror layer, so the dream never starts on the very tick of the gesture and an interrupted sleep
- * simply cancels it. Sleeping again while dreaming returns to the bound anchor (or the entry
- * point).</p>
+ * Such a player lies still for the configured entry delay first and only then slips into the mirror
+ * layer, so the dream never starts on the very tick of the gesture and an interrupted sleep simply
+ * cancels it. Sleeping again while dreaming returns to the bound anchor (or the entry point).</p>
  */
 @EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID)
 public final class DreamSleepEvents {
     /**
-     * Ticks a ground sleeper with the dream_walk effect has to stay asleep before the dream starts.
-     * Kept below the vanilla 100 tick deep-sleep threshold, so entering the dream can never turn
-     * into a "everybody slept" night skip.
+     * Ticks a dreamer lies still before waking up again. The entry delay is configured separately
+     * ({@link DreamServerConfig#dreamEntryDelayTicks()}), but both stay below the vanilla 100 tick
+     * deep-sleep threshold.
      */
-    private static final int DREAM_ENTRY_DELAY = 60;
-
-    /** Distance in blocks at which dream graffiti start to speed up falling asleep. */
-    private static final double GRAFFITI_SLEEP_RANGE = 16.0D;
-    /** Largest share of the sleep delay graffiti may remove, at zero distance. */
-    private static final float MAX_GRAFFITI_SPEEDUP = 0.60F;
-
-    /** Sleepers on their way out of the dream, keyed by player UUID, value = ticks slept. */
     private static final int DREAM_EXIT_DELAY = 60;
 
     /** Ground sleepers on their way into the dream, keyed by player UUID, value = ticks slept. */
@@ -74,12 +66,11 @@ public final class DreamSleepEvents {
     /**
      * Ticks this sleeper still needs before the dream starts or ends.
      *
-     * <p>Dream graffiti draw the sleeper in: from sixteen blocks away the delay already shrinks in
-     * proportion to the distance, and standing right at one removes sixty percent of it. Both
-     * directions use this - leaving the dream is a sleep of its own, just with the mirror on the
-     * other side. The delay never reaches zero: even on the graffiti the player has to lie still for
-     * a moment, and the result stays well below the vanilla hundred tick deep-sleep threshold, so
-     * entering the dream can never turn into a "everybody slept" night skip.</p>
+     * <p>Dream graffiti draw the sleeper in: inside the configured range the delay shrinks in
+     * proportion to the distance to the nearest graffiti, and standing right at one removes the
+     * configured share of it. Both directions use this - leaving the dream is a sleep of its own,
+     * just with the mirror on the other side. The delay never reaches zero: even on the graffiti the
+     * player has to lie still for a moment.</p>
      *
      * @param fallback the delay on that direction used when no graffiti is near
      */
@@ -87,13 +78,17 @@ public final class DreamSleepEvents {
         if (!(player.level() instanceof ServerLevel level)) {
             return fallback;
         }
-        double nearest = GraffitiRegistry.get(level).nearestDistance(level, player.blockPosition());
-        if (nearest >= GRAFFITI_SLEEP_RANGE) {
+        double range = DreamServerConfig.graffitiSleepRange();
+        if (range <= 0.0D) {
             return fallback;
         }
-        float closeness = (float) (1.0D - nearest / GRAFFITI_SLEEP_RANGE);
-        float factor = 1.0F - MAX_GRAFFITI_SPEEDUP * closeness;
-        return Math.max(1, Math.round(fallback * factor));
+        double nearest = GraffitiRegistry.get(level).nearestDistance(level, player.blockPosition());
+        if (nearest >= range) {
+            return fallback;
+        }
+        double closeness = 1.0D - nearest / range;
+        double factor = 1.0D - DreamServerConfig.maxGraffitiSleepSpeedup() * closeness;
+        return Math.max(1, (int) Math.round(fallback * factor));
     }
 
     // ------------------------------------------------------- falling asleep
@@ -190,7 +185,7 @@ public final class DreamSleepEvents {
                     continue;
                 }
                 int slept = entry.getValue() + 1;
-                if (slept < sleepDelay(player, DREAM_ENTRY_DELAY)) {
+                if (slept < sleepDelay(player, DreamServerConfig.dreamEntryDelayTicks())) {
                     entry.setValue(slept);
                     continue;
                 }

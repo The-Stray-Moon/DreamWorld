@@ -1,0 +1,12 @@
+{
+  "entity.blub.ambient": {
+    "category": "neutral",
+    "subtitle": "subtitles.entity.dreamworld.blub.ambient",
+    "sounds": [
+      "dreamworld:entity/blub/blub",
+      "dreamworld:entity/blub/blub_2",
+      "dreamworld:entity/blub/ao_blub",
+      "dreamworld:entity/blub/ao_blub2"
+    ]
+  }
+}

@@ -19,6 +19,8 @@ import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
@@ -62,6 +64,16 @@ public final class DWRegistry {
             DeferredRegister.create(Registries.CREATIVE_MODE_TAB, DreamWorldNeoForge121.MOD_ID);
     public static final DeferredRegister<ParticleType<?>> PARTICLE_TYPES =
             DeferredRegister.create(Registries.PARTICLE_TYPE, DreamWorldNeoForge121.MOD_ID);
+    public static final DeferredRegister<SoundEvent> SOUNDS =
+            DeferredRegister.create(Registries.SOUND_EVENT, DreamWorldNeoForge121.MOD_ID);
+
+    // ---------------------------------------------------------------- sounds
+
+    /** The blub's own call, the four recordings against the one event. */
+    public static final DeferredHolder<SoundEvent, SoundEvent> BLUB_AMBIENT =
+            SOUNDS.register("entity.blub.ambient", () -> SoundEvent.createVariableRangeEvent(
+                    ResourceLocation.fromNamespaceAndPath(DreamWorldNeoForge121.MOD_ID,
+                            "entity.blub.ambient")));
 
     // ------------------------------------------------------------------ items
 

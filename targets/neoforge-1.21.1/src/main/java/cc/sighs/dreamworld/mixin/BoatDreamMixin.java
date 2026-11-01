@@ -114,13 +114,24 @@ public abstract class BoatDreamMixin implements DreamTunnelBoat {
     /** How far below the hull a surface may be to still count as support under the boat. */
     private static final double DREAM_MAX_GROUND_DISTANCE = 1.5D;
     /** Look-ahead used to find the step target, in ticks of current travel. */
-    private static final double DREAM_STEP_PREDICTION_TICKS = 6.0D;
-    private static final double DREAM_STEP_LOOKAHEAD_MIN = 0.7D;
-    private static final double DREAM_STEP_LOOKAHEAD_MAX = 1.5D;
+    private static final double DREAM_STEP_PREDICTION_TICKS = 10.0D;
+    private static final double DREAM_STEP_LOOKAHEAD_MIN = 0.8D;
+    /**
+     * Longest step look-ahead, in blocks.
+     *
+     * <p>The boat covers up to about half a block per tick once it is up to speed, so a one block
+     * step needs several ticks of warning to be climbed without touching it. A short probe only ever
+     * sees the step once the hull is already against it.</p>
+     */
+    private static final double DREAM_STEP_LOOKAHEAD_MAX = 2.5D;
     /** Ceiling of the assisted lift velocity. */
-    private static final double DREAM_STEP_MAX_LIFT = 0.42D;
+    private static final double DREAM_STEP_MAX_LIFT = 0.55D;
+    /** Vertical speed every assisted lift starts from, so the hull always leaves the ground. */
+    private static final double DREAM_STEP_BASE_LIFT = 0.05D;
+    /** Ticks of the remaining approach that are treated as already spent. */
+    private static final double DREAM_STEP_ARRIVE_MARGIN = 0.5D;
     /** Ticks the assist keeps pushing after the obstacle has left the probe. */
-    private static final int DREAM_STEP_HOLD_TICKS = 6;
+    private static final int DREAM_STEP_HOLD_TICKS = 8;
     /** Smallest horizontal speed at which the boat is considered to be driving into terrain. */
     private static final double DREAM_STEP_MIN_SPEED = 0.05D;
     /**
@@ -405,7 +416,9 @@ public abstract class BoatDreamMixin implements DreamTunnelBoat {
         AABB box = boat.getBoundingBox();
 
         // Only ride up terrain the boat is resting on; dropping next to a wall must not catch it.
-        if (boat.onGround() || delta.y > -0.08D) {
+        // A running assist keeps the gate open: the lift itself makes the hull airborne, and a
+        // descent that is already on its way to a step must not cancel the climb halfway.
+        if (boat.onGround() || delta.y > -0.15D || dreamworld$assistTicks > 0) {
             if (dreamworld$stepAssist(boat, box, direction, speed)) {
                 return;
             }
@@ -561,17 +574,27 @@ public abstract class BoatDreamMixin implements DreamTunnelBoat {
         return boat.level().noCollision(boat, box.move(0.0D, lift, 0.0D).deflate(0.02D));
     }
 
-    /** Pushes the hull upwards with a velocity scaled by the height gap and the distance. */
+    /**
+     * Pushes the hull upwards fast enough to clear the step before it arrives.
+     *
+     * <p>The lift is not a fixed impulse: the hull knows how much height it has to gain and how many
+     * ticks are left before the sweep reaches the obstacle, so the vertical speed is the gap divided
+     * by the remaining time. Far away that is a gentle nudge, close in it approaches the ceiling -
+     * which is exactly the behaviour needed to never arrive at the step's face while still climbing.
+     * </p>
+     */
     @Unique
     private static void dreamworld$applyStepLift(Boat boat, double speed, double targetTop,
             double distance, double lookAhead) {
         Vec3 movement = boat.getDeltaMovement();
         AABB box = boat.getBoundingBox();
         double heightGap = Mth.clamp(targetTop - box.minY, 0.0D, DREAM_STEP_HEIGHT);
-        double urgency = 1.0D - Mth.clamp(distance / lookAhead, 0.0D, 1.0D);
-        double speedFactor = Mth.clamp(speed / 0.28D, 0.75D, 1.5D);
-        double targetY = 0.045D + heightGap * 0.22D + urgency * 0.12D + speedFactor * 0.035D;
-        double lift = Math.min(targetY, DREAM_STEP_MAX_LIFT);
+        // Blocks left before the hull reaches the obstacle, and the ticks that buys.
+        double blocksToHit = Mth.clamp(distance, 0.0D, 1.0D) * lookAhead;
+        double ticksToHit = blocksToHit / Math.max(speed, DREAM_STEP_BLOCKED_SPEED);
+        double climbTicks = Math.max(ticksToHit - DREAM_STEP_ARRIVE_MARGIN, 0.5D);
+        double lift = Mth.clamp(heightGap / climbTicks + DREAM_STEP_BASE_LIFT,
+                DREAM_STEP_BASE_LIFT, DREAM_STEP_MAX_LIFT);
         if (movement.y < lift) {
             boat.setDeltaMovement(movement.x, lift, movement.z);
         }

@@ -20,6 +20,7 @@ public final class DreamWorldNeoForge121 {
         DWRegistry.ENTITIES.register(modBus);
         DWRegistry.EFFECTS.register(modBus);
         DWRegistry.PARTICLE_TYPES.register(modBus);
+        DWRegistry.SOUNDS.register(modBus);
         DWRegistry.TABS.register(modBus);
     }
 }

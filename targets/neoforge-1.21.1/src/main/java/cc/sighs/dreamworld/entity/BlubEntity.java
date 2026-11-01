@@ -3,11 +3,13 @@ package cc.sighs.dreamworld.entity;
 import cc.sighs.dreamworld.DWRegistry;
 import cc.sighs.dreamworld.DreamWorldNeoForge121;
 import cc.sighs.dreamworld.dream.DreamManager;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
+import javax.annotation.Nullable;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.EntityType;
@@ -88,6 +90,18 @@ public class BlubEntity extends Rabbit {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         super.defineSynchedData(builder);
         builder.define(DATA_RESTING, false);
+    }
+
+    /**
+     * The blub's own call, in place of the vanilla rabbit squeak.
+     *
+     * <p>A resting blub stays quiet: it is lying down with its eyes closed, and an ambient sound
+     * coming out of it every half minute is what made the old rabbit feel mechanical.</p>
+     */
+    @Nullable
+    @Override
+    protected SoundEvent getAmbientSound() {
+        return isDown() ? null : DWRegistry.BLUB_AMBIENT.get();
     }
 
     /**
