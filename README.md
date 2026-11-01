@@ -110,18 +110,18 @@ targets/neoforge-26.1/libs/
 
 ## 发布
 
-每个 target 都提供 `publishMods`，可手动发布其自身的产物至 CurseForge 与 Modrinth。两个平台的项目 ID 是所有 target 共用的非敏感信息，在根 `gradle.properties` 中取消注释并填写：
+每个 target 都提供 `publishMods`，可手动发布其自身的产物至 CurseForge 与/或 Modrinth。配置了哪个平台的项目 ID 和 token 就发布哪个平台，未配置的平台会自动跳过。两个平台的项目 ID 是所有 target 共用的非敏感信息，在根 `gradle.properties` 中按需填写：
 
 ```properties
 publish_curseforge_project_id=你的CurseForge项目ID
-publish_modrinth_project_id=你的Modrinth项目ID
+# publish_modrinth_project_id=你的Modrinth项目ID
 ```
 
 token 只从环境变量读取，不要写入仓库。PowerShell 示例：
 
 ```powershell
 $env:CURSEFORGE_TOKEN = '...'
-$env:MODRINTH_TOKEN = '...'
+# $env:MODRINTH_TOKEN = '...'
 $env:PUBLISH_CHANGELOG = '本次版本的更新说明' # 可选
 
 cd targets\forge-1.20.1

@@ -71,11 +71,11 @@ cd targets\forge-1.20.1
 
 ### 发布
 
-在对应 target 内运行 `publishMods` 可手动发布该 target 的 jar 到 CurseForge 和 Modrinth。根 `gradle.properties` 中配置非敏感项目 ID；token 只通过环境变量提供：
+在对应 target 内运行 `publishMods` 可手动发布该 target 的 jar 到 CurseForge 和/或 Modrinth；只有配置了项目 ID 且提供了 token 的平台会上传，未配置的平台会跳过。根 `gradle.properties` 中配置非敏感项目 ID；token 只通过环境变量提供：
 
 ```powershell
 $env:CURSEFORGE_TOKEN = '...'
-$env:MODRINTH_TOKEN = '...'
+# $env:MODRINTH_TOKEN = '...'
 .\gradlew.bat publishMods
 ```
 

@@ -4,7 +4,7 @@
 
 本模组没有添加传统的新维度，而是加入了所有维度的原始镜像——梦世界，这个世界兼具美观与实用，你可以制作全套梦境合金装备来进行跨越空间的操作，也可以和心上人体验一次在梦中的天空划船。
 
-![img](https://resource-api.xyeidc.com//client/members/pics/acae0a8a)
+![梦世界](https://resource-api.xyeidc.com//client/members/pics/acae0a8a)
 
 ## 入梦
 
@@ -14,7 +14,7 @@
 
 梦境橡皮泥可以烧制成梦境结晶，梦境结晶在砂轮磨成梦境粉末，梦境粉末酿造成梦境奶茶。
 
-![img](https://resource-api.xyeidc.com//client/members/pics/d6d7b755)
+![入梦四件套](https://resource-api.xyeidc.com//client/members/pics/d6d7b755)
 
 喝了梦境奶茶后会获得梦游效果，梦游效果下，玩家可以无条件睡觉，睡着后即可进入梦世界的**对应坐标**。
 
@@ -24,9 +24,9 @@
 
 梦世界的天空与地面的色彩会随机交换，地面的着色会有浮动，不同类型方块的着色也会有浮动，可以在配置文件中调整。
 
-![img](https://resource-api.xyeidc.com//client/members/pics/b1dbec5c)
+![着色模式1](https://resource-api.xyeidc.com//client/members/pics/b1dbec5c)
 
-![img](https://resource-api.xyeidc.com//client/members/pics/3b66a65d)
+![着色模式2](https://resource-api.xyeidc.com//client/members/pics/3b66a65d)
 
 入梦的生物才会来到梦世界，这里的原住民只有果冻兔，一种蓝白色的蠢萌兔子，未来它还会出现在即将到来的汐浮维度，但现在先混个脸熟。
 
@@ -36,7 +36,7 @@
 
 萌趣的世界更受大众喜爱！
 
-![img](https://resource-api.xyeidc.com//client/members/pics/b2a99270)
+![果冻兔](https://resource-api.xyeidc.com//client/members/pics/b2a99270)
 
 在梦世界，玩家可以无条件睡觉，入梦后会返回现实中的**对应坐标**。
 
@@ -47,7 +47,7 @@
 - 船可以跳跃，还可以爬坡，绝不是马那样的机械爬坡，而是高性能的预测式爬坡。
 - 船有亮闪闪的尾焰！
 
-![img](https://resource-api.xyeidc.com//client/members/pics/b0315ff2)
+![梦行舟](https://resource-api.xyeidc.com//client/members/pics/b0315ff2)
 
 通过梦中划船来跑图是不错的选择，经济实惠，哪里都能去。
 
@@ -65,7 +65,7 @@
 
 此外，在梦境涂鸦附近睡觉时，入梦时间会得到缩减，可以在配置文件中修改。
 
-![img](https://resource-api.xyeidc.com//client/members/pics/c379f34e)
+![梦境甬道](https://resource-api.xyeidc.com//client/members/pics/c379f34e)
 
 ## 梦境合金
 
@@ -81,7 +81,7 @@
 
 被转移到梦世界的其他方块，会以原色渲染。
 
-![img](https://resource-api.xyeidc.com//client/members/pics/d2170834)
+![梦境侵入](https://resource-api.xyeidc.com//client/members/pics/d2170834)
 
 上述说的转移行为也是对应坐标的，而梦境合金矛能改变转移的方式。
 
@@ -99,7 +99,7 @@
 
 总之，利用梦境合金系列装备，就能随时来一场跨越空间的奔赴。
 
-![img](https://resource-api.xyeidc.com//client/members/pics/c66ec218)
+![梦境合金系列](https://resource-api.xyeidc.com//client/members/pics/c66ec218)
 
 ## 其他
 
