@@ -1,7 +1,7 @@
 package cc.sighs.dreamworld.recipe;
 
-import cc.sighs.dreamworld.DWRegistry;
-import cc.sighs.dreamworld.DreamWorldNeoForge121;
+import cc.sighs.dreamworld.DWObjects;
+import cc.sighs.dreamworld.DreamWorld;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.Ingredient;
@@ -17,7 +17,7 @@ import net.neoforged.neoforge.event.brewing.RegisterBrewingRecipesEvent;
  * {@link RegisterBrewingRecipesEvent}. The event fires on the main event bus for both the
  * server and the client, so the registration must be deterministic - it is.</p>
  */
-@EventBusSubscriber(modid = DreamWorldNeoForge121.MOD_ID)
+@EventBusSubscriber(modid = DreamWorld.MOD_ID)
 public final class DWBrewing {
     private DWBrewing() {
     }
@@ -28,7 +28,7 @@ public final class DWBrewing {
                 // Input: sits in the same slot water bottles would use.
                 Ingredient.of(Items.GLASS_BOTTLE),
                 // Ingredient: sits in the same slot nether wart would use.
-                Ingredient.of(DWRegistry.DREAM_POWDER.get()),
-                new ItemStack(DWRegistry.DREAM_TEA.get()));
+                Ingredient.of(DWObjects.DREAM_POWDER.get()),
+                new ItemStack(DWObjects.DREAM_TEA.get()));
     }
 }

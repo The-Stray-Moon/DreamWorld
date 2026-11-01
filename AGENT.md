@@ -10,12 +10,15 @@ targets/<loader>-<mc-version>/  一个独立的加载器 + Minecraft 版本工�
 gradle/target-conventions/      所有 target 共用的构建约定
 ```
 
-- `common` 放所有没有确证版本差异的代码，包括引用 Minecraft 与 loader 类型的那部分；依赖平台类型不是拆分理由，Java 版本也不是。
+- `common` 放所有没有确证版本差异的代码，包括引用 Minecraft 类型的那部分；依赖平台类型不是拆分理由，Java 版本也不是。
+- `common` 的独立编译基线是 `neoforge-1.21.1`（`common/build.gradle`、`common/gradle.properties`）。当前 1.21.1 系的 NeoForge 与 Fabric target 直接共享这棵树。
 - `targets/*` 只放该 target 的入口、注册、事件、Minecraft API、Mixin、网络、渲染和 metadata。
+- loader 差异通过 `common` 中的 `cc.sighs.dreamworld.spi` 暴露：`DreamPlatform`、`DreamNetwork`、`DreamConfig`、`DreamPersistentData`、`DreamHolder`。target 在入口安装实现，并把注册表对象绑定到 `DWObjects`；共通逻辑不得直接 import `net.neoforged.*` 或 `net.fabricmc.*`。
+- 版本差异（Minecraft API 变化）仍按文件登记：在 target 的 `prepareCommonSources` 中 `exclude` 对应 common 路径，并放入该版本自己的实现。
 - 每个 target 通过 `includeBuild('../../common')` 把 `common` 作为 composite build 导入 IDE（仅让 IDE 把 `common` 当作独立可编辑模块，不产生 Gradle 项目依赖）；再用 source-set sharing 把共享源码编译进自己：`prepareCommonSources` 这个 `Sync` 任务把 `../../common/src/main/java` 同步到 `$buildDir/generated/common-main` 并加入 main 源码集，test 源码集加入 `../../common/src/test/java` 与 `../../common/src/test/resources`。target 不依赖 `project(':common')`。
 - 版本差异的登记点是各 target `prepareCommonSources` 里的 `exclude` 块：某个 common 文件在该 target 上有确证差异时，在那里 `exclude '<路径>'`，并把该 target 自己的实现放进 target。
 - 唯一能把代码从 `common` 拆到 `targets/<loader>-<mc-version>/` 的理由是：经阅读实际源码/API 确证该内容在不同 loader 或不同 Minecraft 版本之间存在差异。不得凭猜测拆分，也不得为了“代码好看”而拆分。
-- `common` 现在不是独立的 Gradle 子项目，而是共享源码树：`common/build.gradle` 用 `java-library` + `net.neoforged.moddev.legacyforge 2.0.91`、toolchain 17，对着与 `targets/forge-1.20.1` 相同的 Forge 1.20.1 类路径独立编译与测试（`gradlew -p common build` / `gradlew -p common test`）。
+- `common` 现在不是独立的 Gradle 子项目，而是共享源码树：`common/build.gradle` 用 `java-library` + `net.neoforged.moddev 2.0.141`、toolchain 21，对着 `targets/neoforge-1.21.1` 的 NeoForge 1.21.1 类路径独立编译与测试（`gradlew -p common build` / `gradlew -p common test`）。
 - 不要用运行时版本判断、反射或同名 class 覆盖来兼容不同 target；不同 API 应由各 target 的适配器实现。
 - 一个发布 jar 只对应一个 loader 与一个 Minecraft 版本，禁止 universal jar。
 

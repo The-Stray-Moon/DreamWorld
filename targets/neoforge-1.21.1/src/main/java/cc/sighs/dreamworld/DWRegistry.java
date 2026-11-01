@@ -8,6 +8,7 @@ import cc.sighs.dreamworld.entity.BlubEntity;
 import cc.sighs.dreamworld.entity.DreamSpearEntity;
 import cc.sighs.dreamworld.item.DreamGraffitiItem;
 import cc.sighs.dreamworld.item.DreamCrystalItem;
+import cc.sighs.dreamworld.item.NeoForgeDreamCrystalItem;
 import cc.sighs.dreamworld.item.DreamShovelItem;
 import cc.sighs.dreamworld.item.DreamSpearItem;
 import cc.sighs.dreamworld.item.DreamSwordItem;
@@ -80,7 +81,7 @@ public final class DWRegistry {
     public static final DeferredItem<Item> DREAM_CLAY =
             ITEMS.registerSimpleItem("dream_clay", new Item.Properties());
     public static final DeferredItem<Item> DREAM_CRYSTAL =
-            ITEMS.register("dream_crystal", () -> new DreamCrystalItem(new Item.Properties()));
+            ITEMS.register("dream_crystal", () -> new NeoForgeDreamCrystalItem(new Item.Properties()));
     public static final DeferredItem<Item> DREAM_POWDER =
             ITEMS.registerSimpleItem("dream_powder", new Item.Properties());
     public static final DeferredItem<Item> DREAM_ALLOY =
@@ -180,4 +181,33 @@ public final class DWRegistry {
                         output.accept(BLUB_SPAWN_EGG.get());
                     })
                     .build());
+
+    /**
+     * Fills the shared object table with this target's registry entries.
+     *
+     * <p>Deferred holders are bound as suppliers, so the shared tree never asks for an object that
+     * this loader has not created yet.</p>
+     */
+    public static void bindObjects() {
+        DWObjects.DREAM_CLAY.bind(DREAM_CLAY);
+        DWObjects.DREAM_CRYSTAL.bind(DREAM_CRYSTAL);
+        DWObjects.DREAM_POWDER.bind(DREAM_POWDER);
+        DWObjects.DREAM_ALLOY.bind(DREAM_ALLOY);
+        DWObjects.DREAM_TEA.bind(DREAM_TEA);
+        DWObjects.DREAM_ALLOY_SWORD.bind(DREAM_ALLOY_SWORD);
+        DWObjects.DREAM_ALLOY_SHOVEL.bind(DREAM_ALLOY_SHOVEL);
+        DWObjects.DREAM_ALLOY_WAND.bind(DREAM_ALLOY_WAND);
+        DWObjects.DREAM_ALLOY_SPEAR.bind(DREAM_ALLOY_SPEAR);
+        DWObjects.DREAM_GRAFFITI_ITEM.bind(DREAM_GRAFFITI_ITEM);
+        DWObjects.BLUB_SPAWN_EGG.bind(BLUB_SPAWN_EGG);
+        DWObjects.DREAM_GRAFFITI.bind(DREAM_GRAFFITI);
+        DWObjects.DREAM_GRAFFITI_BLOCK.bind(DREAM_GRAFFITI);
+        DWObjects.GRAFFITI_BE.bind(GRAFFITI_BE);
+        DWObjects.DREAM_CLAY_ENTITY.bind(DREAM_CLAY_ENTITY);
+        DWObjects.BLUB.bind(BLUB);
+        DWObjects.DREAM_SPEAR_ENTITY.bind(DREAM_SPEAR_ENTITY);
+        DWObjects.DREAM_WALK.bind(DREAM_WALK);
+        DWObjects.DREAM_PETAL.bind(DREAM_PETAL);
+        DWObjects.BLUB_AMBIENT.bind(BLUB_AMBIENT);
+    }
 }

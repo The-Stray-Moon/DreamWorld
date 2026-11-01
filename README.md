@@ -37,9 +37,26 @@
 
 ## 结构
 
-- `common/`: 所有没有确证版本差异的共享代码与共享资源，可以引用 Minecraft 与 loader 类型。
-- `targets/*`: loader 和版本专属入口、metadata、资源及 API 适配。
+- `common/`: 所有没有确证版本差异的共享代码与共享资源，可以引用 Minecraft 类型，但不直接依赖任何 loader API；loader 能力经 `cc.sighs.dreamworld.spi` 注入。
+- `targets/*`: loader 和版本专属入口、注册、config/network 适配、事件桥、Mixin、metadata 与版本专属资源。
 - `gradle/target-conventions/publish.gradle`: 所有 target 共用的发布约定。
+
+`common` 的独立编译基线是 NeoForge 1.21.1（`common/build.gradle`、`common/gradle.properties`），因此在当前迁移阶段，1.21.1 系的 `neoforge-1.21.1` 与 `fabric-1.21.1` 直接共享整棵共享树：
+
+| Target | 状态 |
+| --- | --- |
+| `neoforge-1.21.1` | 已迁移到 SPI 结构并通过 `build` |
+| `fabric-1.21.1` | 已迁移到 SPI 结构并通过 `build` |
+| `forge-1.20.1` / `forge-1.19.2` / `forge-1.18.2` / `fabric-1.20.1` | 入口与构建骨架保留；Minecraft 1.20.1 及更早的 API 变体仍需逐版本适配 |
+| `neoforge-26.1` / `fabric-26.1` | 入口与构建骨架保留；26.1 的类名与渲染管线变化仍需逐版本适配 |
+
+SPI 的边界：
+
+- `DreamPlatform`：主线程调度、资源 ID、效果、实体类型 ID、追踪刷新与其他 loader 能力。
+- `DreamNetwork`：按玩家/全体/范围发送和客户端到服务端发送；具体 payload 编码由 target 负责。
+- `DreamConfig`：共享代码读取的六个设置项；target 决定配置文件格式。
+- `DreamPersistentData`：实体上的模组持久化数据；Forge/NeoForge 用 `getPersistentData`，Fabric 用 data attachment。
+- `DWObjects` + `DreamHolder`：共享代码命名所有注册项，target 注册后绑定。
 
 每个 target 通过 source-set sharing 把 `../../common/src/main/java`（由 `prepareCommonSources` 同步到生成目录）直接编译进自己的源码集，因此 `common` 既能在任意 target 内被独立编辑，也能单独构建：
 

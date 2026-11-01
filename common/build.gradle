@@ -1,10 +1,12 @@
 // Standalone build for the shared source tree.
 //
 // common/ holds every piece of code that has no confirmed loader/version
-// difference. It MAY reference Minecraft and loader types: the split rule is
-// "a confirmed version difference", not "platform independence". It compiles
-// against the same legacyforge classpath as targets/forge-1.20.1, so it can be
-// built and tested on its own:
+// difference. It MAY reference Minecraft types: the split rule is "a confirmed
+// version difference", not "platform independence". Loader APIs are reached
+// through the SPI in cc.sighs.dreamworld.spi, never directly.
+//
+// It compiles against the NeoForge 1.21.1 classpath, the reference target of the
+// current main version, so it can be built and tested on its own:
 //
 //     gradlew -p common build
 //
@@ -14,7 +16,7 @@
 // common files that do have a version difference.
 plugins {
     id 'java-library'
-    id 'net.neoforged.moddev.legacyforge' version '2.0.91'
+    id 'net.neoforged.moddev' version '2.0.141'
 }
 
 def properties = new Properties()
@@ -26,21 +28,30 @@ group = mod_group_id
 version = mod_version
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(17)
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
 }
 
-legacyForge {
-    version = "${forge_minecraft_version}-${forge_version}"
+neoForge {
+    version = neoforge_121_version
 }
 
 repositories {
     mavenCentral()
 }
 
+// Unit tests touch Minecraft types (BlockPos/Vec3), so they need the mod classpath.
+sourceSets {
+    test {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+}
+
 dependencies {
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'com.google.code.gson:gson:2.10.1'
 }
 
 tasks.withType(JavaCompile).configureEach {

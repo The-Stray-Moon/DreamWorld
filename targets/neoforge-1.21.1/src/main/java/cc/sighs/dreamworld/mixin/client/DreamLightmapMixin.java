@@ -1,7 +1,7 @@
 package cc.sighs.dreamworld.mixin.client;
 
 import cc.sighs.dreamworld.client.DreamClientState;
-import cc.sighs.dreamworld.config.DreamClientConfig;
+import cc.sighs.dreamworld.spi.DreamPlatform;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.world.level.dimension.DimensionType;
 import org.spongepowered.asm.mixin.Mixin;
@@ -33,7 +33,7 @@ public abstract class DreamLightmapMixin {
     private static float dreamworld$ambientSkyLight(DimensionType type, int skyLight) {
         if (DreamClientState.isDreaming()) {
             return LightTexture.getBrightness(type,
-                    Math.max(skyLight, DreamClientConfig.ambientSkyLight()));
+                    Math.max(skyLight, DreamPlatform.get().config().ambientSkyLight()));
         }
         return LightTexture.getBrightness(type, skyLight);
     }

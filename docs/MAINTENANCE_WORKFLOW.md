@@ -30,7 +30,7 @@
 
 ### common
 
-`common` 包含所有没有确证版本差异的代码，可以引用 Minecraft 类型，也可以引用 loader、Mixin、渲染与网络 API；依赖平台类型不是拆分理由，Java 版本也不是。
+`common` 包含所有没有确证版本差异的代码，可以引用 Minecraft 类型与渲染/网络数据结构，但不得直接 import loader API（`net.neoforged.*`、`net.fabricmc.*`）。loader 差异经 `cc.sighs.dreamworld.spi` 注入；依赖平台类型不是拆分理由，Java 版本也不是。
 
 从 `common` 拆到 `targets/<loader>-<mc-version>/` 的唯一理由是：经阅读实际源码/API 确证该内容在不同 loader 或不同 Minecraft 版本之间存在差异。不能凭猜测拆，也不能为了“代码好看”拆。
 

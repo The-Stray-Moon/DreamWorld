@@ -29,9 +29,9 @@ targetBuilds.each { targetName, targetBuild ->
 // (`gradlew -p common build`); the root build orchestrates the target builds.
 tasks.register('build') {
     group = 'build'
-    description = 'Builds the selected target (defaults to the only configured one).'
+    description = 'Builds the selected target (defaults to neoforge-1.21.1, the current reference version).'
 
-    def effectiveTarget = selectedTarget ?: targetBuilds.keySet().first()
+    def effectiveTarget = selectedTarget ?: 'neoforge-1.21.1'
     dependsOn tasks.named(targetBuilds[effectiveTarget].task)
 
     if (buildAllTargets.get()) {

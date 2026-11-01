@@ -1,0 +1,26 @@
+{
+  "required": true,
+  "package": "cc.sighs.dreamworld.mixin",
+  "mixins": [
+    "BoatDreamMixin",
+    "DWLivingEntityAccessor",
+    "DreamPatchMixin",
+    "DreamMoveMixin",
+    "DreamMiningMixin",
+    "DreamSuffocationMixin",
+    "DreamHitboxMixin",
+    "DreamVehicleMixin",
+    "DreamEntityTrackingMixin",
+    "PlayerSleepMixin",
+    "GrindstoneSlot1Mixin",
+    "GrindstoneSlot2Mixin",
+    "GrindstoneMenuMixin",
+    "PotionBrewingMixin",
+    "LevelAccessor"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "minVersion": "0.8"
+}

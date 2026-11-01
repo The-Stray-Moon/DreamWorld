@@ -4,7 +4,7 @@ import cc.sighs.dreamworld.boat.DreamBoatGate;
 import cc.sighs.dreamworld.boat.DreamTunnelBoat;
 import cc.sighs.dreamworld.boat.TunnelGeometry;
 import cc.sighs.dreamworld.client.DreamClientState;
-import cc.sighs.dreamworld.config.DreamServerConfig;
+import cc.sighs.dreamworld.spi.DreamPlatform;
 import cc.sighs.dreamworld.dream.DreamEntities;
 import cc.sighs.dreamworld.dream.DreamManager;
 import cc.sighs.dreamworld.dream.GraffitiRegistry;
@@ -719,7 +719,7 @@ public abstract class BoatDreamMixin implements DreamTunnelBoat {
     @Unique
     private static int dreamworld$tunnelLimit(Boat boat) {
         return boat.level() instanceof ServerLevel
-                ? DreamServerConfig.maxTunnelsPerGraffiti()
+                ? DreamPlatform.get().config().maxTunnelsPerGraffiti()
                 : DreamClientState.maxTunnelsPerGraffiti();
     }
 
