@@ -1,0 +1,22 @@
+{
+  "required": true,
+  "package": "cc.sighs.dreamworld.mixin",
+  "refmap": "dreamworld.refmap.json",
+  "mixins": [
+    "BoatDreamMixin",
+    "DWLivingEntityAccessor",
+    "DreamPatchMixin",
+    "DreamMoveMixin",
+    "DreamMiningMixin",
+    "DreamSuffocationMixin",
+    "DreamHitboxMixin",
+    "DreamVehicleMixin",
+    "DreamEntityTrackingMixin"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "compatibilityLevel": "JAVA_17",
+  "minVersion": "0.8"
+}

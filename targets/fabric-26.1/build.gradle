@@ -42,6 +42,52 @@ tasks.register('prepareCommonSources', Sync) {
         // implementation, for example
         //     exclude 'com/example/network/ChunkPacket.java'
         // Everything not listed here stays shared with every other target.
+        // 26.1 ships deobfuscated with renames (ResourceLocation -> Identifier,
+        // Boat package move, ItemInstance/ItemStackTemplate, Optional NBT
+        // getters, GUI/render pipeline overhaul), so every shared file that
+        // touches a renamed API is replaced by the copy under
+        // src/main/java of this target.
+        exclude 'cc/sighs/dreamworld/block/DreamGraffitiBlock.java'
+        exclude 'cc/sighs/dreamworld/block/DreamGraffitiBlockEntity.java'
+        exclude 'cc/sighs/dreamworld/boat/DreamBoatGate.java'
+        exclude 'cc/sighs/dreamworld/client/DWClientPayloadHandler.java'
+        exclude 'cc/sighs/dreamworld/client/DreamBlink.java'
+        exclude 'cc/sighs/dreamworld/client/DreamBlockTint.java'
+        exclude 'cc/sighs/dreamworld/client/DreamBoatControls.java'
+        exclude 'cc/sighs/dreamworld/client/DreamBoatTrail.java'
+        exclude 'cc/sighs/dreamworld/client/DreamClientPatches.java'
+        exclude 'cc/sighs/dreamworld/client/DreamHud.java'
+        exclude 'cc/sighs/dreamworld/client/DreamVisuals.java'
+        exclude 'cc/sighs/dreamworld/client/DreamWeather.java'
+        exclude 'cc/sighs/dreamworld/client/PetalSilhouette.java'
+        exclude 'cc/sighs/dreamworld/client/entity/BlubModel.java'
+        exclude 'cc/sighs/dreamworld/client/entity/BlubRenderer.java'
+        exclude 'cc/sighs/dreamworld/client/entity/DreamSpearRenderer.java'
+        exclude 'cc/sighs/dreamworld/client/particle/DreamPetalParticle.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamCommand.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamDamageRules.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamEntities.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamIntrusion.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamManager.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamMobs.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamPatchSync.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamPatches.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamSleepEvents.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamWorldRules.java'
+        exclude 'cc/sighs/dreamworld/dream/GraffitiRegistry.java'
+        exclude 'cc/sighs/dreamworld/entity/BlubEntity.java'
+        exclude 'cc/sighs/dreamworld/entity/DreamClayEntity.java'
+        exclude 'cc/sighs/dreamworld/entity/DreamSpearEntity.java'
+        exclude 'cc/sighs/dreamworld/item/DreamShovelItem.java'
+        exclude 'cc/sighs/dreamworld/item/DreamSpearItem.java'
+        exclude 'cc/sighs/dreamworld/item/DreamSwordItem.java'
+        exclude 'cc/sighs/dreamworld/item/DreamTeaItem.java'
+        exclude 'cc/sighs/dreamworld/item/DreamTier.java'
+        exclude 'cc/sighs/dreamworld/item/DreamToolEvents.java'
+        exclude 'cc/sighs/dreamworld/item/DreamWandItem.java'
+        exclude 'cc/sighs/dreamworld/net/DWPayloads.java'
+        exclude 'cc/sighs/dreamworld/net/DreamPackets.java'
+        exclude 'cc/sighs/dreamworld/spi/DreamPlatform.java'
     }
     into "$buildDir/generated/common-main"
 }
@@ -59,6 +105,8 @@ dependencies {
     minecraft "com.mojang:minecraft:${fabric_minecraft_version}"
     implementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+
+    compileOnly 'com.google.code.findbugs:jsr305:3.0.2'
 
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -95,3 +143,26 @@ tasks.named('test', Test).configure {
 }
 
 apply from: file('../../gradle/target-conventions/publish.gradle')
+
+// 26.1 changed the recipe schema (ingredients are bare item ids, the old
+// {"item": ...} object is rejected) and the shared tree still ships the 1.21.1
+// recipes. Common's recipe directory is therefore taken out of the shared
+// resource set and re-added here without it; this target ships the 26.1
+// versions under src/main/resources/data/dreamworld/recipe.
+def commonResources = file('../../common/src/main/resources')
+sourceSets.main.resources.setSrcDirs(
+        sourceSets.main.resources.srcDirs.findAll { it != commonResources })
+tasks.named('processResources', ProcessResources).configure {
+    from(commonResources) {
+        exclude 'data/dreamworld/recipe/**'
+    }
+}
+
+// The 26.1 dev launch does not inject an offline user, so authlib tries the live
+// profile endpoint and aborts startup when it times out. A fixed offline user keeps
+// runClient usable without network access.
+tasks.named('runClient', JavaExec).configure {
+    args '--username', 'Dev',
+            '--uuid', '9e5d41e7-4785-3b2f-8261-593dade57f6e',
+            '--accessToken', '0'
+}

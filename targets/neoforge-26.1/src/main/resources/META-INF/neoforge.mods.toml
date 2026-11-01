@@ -9,6 +9,12 @@ displayName = "${mod_name}"
 authors = "${mod_authors}"
 description = "${mod_description}"
 
+[[mixins]]
+    config = "dreamworld.mixins.json"
+
+[[mixins]]
+    config = "dreamworld.client.mixins.json"
+
 [[dependencies.${mod_id}]]
 modId = "neoforge"
 type = "required"
@@ -22,4 +28,3 @@ type = "required"
 versionRange = "[${minecraft_version},26.2)"
 ordering = "NONE"
 side = "BOTH"
-

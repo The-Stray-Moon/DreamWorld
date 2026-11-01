@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "A": {
+      "item": "dreamworld:dream_alloy"
+    },
+    "S": {
+      "item": "minecraft:stick"
+    }
+  },
+  "pattern": [
+    "A",
+    "S",
+    "S"
+  ],
+  "result": {
+    "item": "dreamworld:dream_alloy_shovel",
+    "count": 1
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "required": true,
+  "package": "cc.sighs.dreamworld.mixin",
+  "mixins": [
+    "BoatDreamMixin",
+    "DWLivingEntityAccessor",
+    "DreamPatchMixin",
+    "DreamMoveMixin",
+    "DreamMiningMixin",
+    "DreamSuffocationMixin",
+    "DreamHitboxMixin",
+    "DreamVehicleMixin",
+    "DreamEntityTrackingMixin"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "minVersion": "0.8"
+}

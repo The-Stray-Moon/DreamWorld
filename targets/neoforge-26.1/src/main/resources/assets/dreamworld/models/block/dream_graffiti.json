@@ -1,0 +1,21 @@
+{
+  "parent": "minecraft:block/block",
+  "ambientocclusion": false,
+  "textures": {
+    "graffiti": "dreamworld:block/dream_graffiti",
+    "particle": "#graffiti"
+  },
+  "elements": [
+    {
+      "from": [0, 0, 15.2],
+      "to": [16, 16, 16],
+      "faces": {
+        "north": { "uv": [0, 0, 16, 16], "texture": "#graffiti", "shade": false },
+        "up": { "uv": [0, 0, 16, 1], "texture": "#graffiti" },
+        "down": { "uv": [0, 15, 16, 16], "texture": "#graffiti" },
+        "east": { "uv": [15, 0, 16, 16], "texture": "#graffiti" },
+        "west": { "uv": [0, 0, 1, 16], "texture": "#graffiti" }
+      }
+    }
+  ]
+}

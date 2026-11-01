@@ -30,7 +30,7 @@ public abstract class DreamLightmapMixin {
                     target = "Lnet/minecraft/client/renderer/LightTexture;getBrightness"
                             + "(Lnet/minecraft/world/level/dimension/DimensionType;I)F",
                     ordinal = 0))
-    private static float dreamworld$ambientSkyLight(DimensionType type, int skyLight) {
+    private float dreamworld$ambientSkyLight(DimensionType type, int skyLight) {
         if (DreamClientState.isDreaming()) {
             return LightTexture.getBrightness(type,
                     Math.max(skyLight, DreamPlatform.get().config().ambientSkyLight()));

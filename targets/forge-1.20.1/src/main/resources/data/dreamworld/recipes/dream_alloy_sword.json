@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "A": {
+      "item": "dreamworld:dream_alloy"
+    },
+    "S": {
+      "item": "minecraft:stick"
+    }
+  },
+  "pattern": [
+    "A",
+    "A",
+    "S"
+  ],
+  "result": {
+    "item": "dreamworld:dream_alloy_sword",
+    "count": 1
+  }
+}

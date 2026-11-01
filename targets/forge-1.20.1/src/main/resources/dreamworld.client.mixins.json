@@ -1,0 +1,24 @@
+{
+  "required": true,
+  "package": "cc.sighs.dreamworld.mixin.client",
+  "refmap": "dreamworld.refmap.json",
+  "mixins": [],
+  "client": [
+    "ClientLevelMixin",
+    "ClientLevelPatchMixin",
+    "ModelBlockRendererMixin",
+    "BlockRenderDispatcherMixin",
+    "MultiPlayerGameModeMixin",
+    "DreamInteractionMixin",
+    "DreamWeatherMixin",
+    "DreamPoseMixin",
+    "DreamFluidTintMixin",
+    "DreamSunMixin",
+    "DreamLightmapMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "compatibilityLevel": "JAVA_17",
+  "minVersion": "0.8"
+}

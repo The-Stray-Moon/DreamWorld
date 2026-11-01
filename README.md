@@ -16,24 +16,37 @@
 
 | Target | Gradle JVM | 构建命令 |
 | --- | --- | --- |
-| `forge-1.20.1` | JDK 21 | `targets\forge-1.20.1\.\gradlew.bat clean build` |
-| `forge-1.19.2` | JDK 21 | `targets\forge-1.19.2\.\gradlew.bat clean build` |
-| `forge-1.18.2` | JDK 21 | `targets\forge-1.18.2\.\gradlew.bat clean build` |
+| `forge-1.20.1` | JDK 17 | `targets\forge-1.20.1\.\gradlew.bat clean build` |
+| `forge-1.19.2` | JDK 17 | `targets\forge-1.19.2\.\gradlew.bat clean build` |
+| `forge-1.18.2` | JDK 17 | `targets\forge-1.18.2\.\gradlew.bat clean build` |
 | `fabric-1.20.1` | JDK 17 | `targets\fabric-1.20.1\.\gradlew.bat clean build` |
 | `fabric-1.21.1` | JDK 21 | `targets\fabric-1.21.1\.\gradlew.bat clean build` |
 | `fabric-26.1` | JDK 25 | `targets\fabric-26.1\.\gradlew.bat clean build` |
 | `neoforge-1.21.1` | JDK 21 | `targets\neoforge-1.21.1\.\gradlew.bat clean build` |
 | `neoforge-26.1` | JDK 25 | `targets\neoforge-26.1\.\gradlew.bat clean build` |
 
-根项目默认只同步 `common`。使用 JDK 21 时可选择性构建全部 JDK 21 target：
+根项目默认构建 `neoforge-1.21.1`（当前参考版本）。也可以按 target 选择：
 
 ```powershell
 .\gradlew.bat '-Ptarget=forge-1.20.1' build
 .\gradlew.bat '-Ptarget=fabric-1.20.1' build
-.\gradlew.bat -PallTargets=true build
+.\gradlew.bat -PallTargets=true build   # 仅在同一个 Gradle JVM 能覆盖所有 target 时使用
 ```
 
-`fabric-26.1` 与 `neoforge-26.1` 因 JDK 25 与 Gradle 9 要求独立构建。
+`fabric-26.1` 与 `neoforge-26.1` 需要 JDK 25 和各自的 Gradle 版本，必须独立构建；1.21.1 系需要 JDK 21；1.20.1 及更早的 Forge/Fabric target 使用 JDK 17。
+
+### 客户端启动验证
+
+八个 target 都已实际执行 `runClient` 到主菜单。验证命令与构建命令相同，只需把 `build` 换成 `runClient`：
+
+```powershell
+cd targets\<target>
+.\gradlew.bat runClient --console plain --no-daemon --offline
+```
+
+验证标准：日志出现 `OpenAL initialized` / `Sound engine started` / `gui.png-atlas`，且 `run/crash-reports/` 没有新增崩溃报告。窗口启动后用 `Ctrl+C` 或超时结束即可。`fabric-26.1` 的 `build.gradle` 已为 dev run 注入固定的离线用户名，避免 authlib 在无网络时阻塞启动；Fabric 日志中的 `Failed to fetch user properties` / Realms 401 属于 dev 离线认证提示，不影响启动。
+
+`forge-1.18.2` 的 Forge 发行包本身不携带 Mixin 运行时，`runClient` 可以启动，但依赖 Mixin 的梦境移动/渲染功能需要外部 Mixin bootstrap 才会生效。
 
 ## 结构
 
@@ -41,14 +54,20 @@
 - `targets/*`: loader 和版本专属入口、注册、config/network 适配、事件桥、Mixin、metadata 与版本专属资源。
 - `gradle/target-conventions/publish.gradle`: 所有 target 共用的发布约定。
 
-`common` 的独立编译基线是 NeoForge 1.21.1（`common/build.gradle`、`common/gradle.properties`），因此在当前迁移阶段，1.21.1 系的 `neoforge-1.21.1` 与 `fabric-1.21.1` 直接共享整棵共享树：
+`common` 的独立编译基线是 NeoForge 1.21.1（`common/build.gradle`、`common/gradle.properties`）。所有 target 都已把主版本内容移植到自己的版本；1.21.1 系直接共享整棵树，其他版本通过 `prepareCommonSources` 的逐文件 `exclude` + target 内同名实现完成版本适配。
 
-| Target | 状态 |
-| --- | --- |
-| `neoforge-1.21.1` | 已迁移到 SPI 结构并通过 `build` |
-| `fabric-1.21.1` | 已迁移到 SPI 结构并通过 `build` |
-| `forge-1.20.1` / `forge-1.19.2` / `forge-1.18.2` / `fabric-1.20.1` | 入口与构建骨架保留；Minecraft 1.20.1 及更早的 API 变体仍需逐版本适配 |
-| `neoforge-26.1` / `fabric-26.1` | 入口与构建骨架保留；26.1 的类名与渲染管线变化仍需逐版本适配 |
+| Target | 状态 | 已验证 |
+| --- | --- | --- |
+| `neoforge-1.21.1` | 已移植，SPI 结构 | `build` + 单测 |
+| `fabric-1.21.1` | 已移植，SPI 结构 | `build` + 单测 |
+| `forge-1.20.1` | 已移植，1.20.1 变体 | `build` + 单测 + dev server 启动 |
+| `forge-1.19.2` | 已移植，1.19.2 变体 + SRG refmap | `build` + 单测 |
+| `forge-1.18.2` | 已移植，1.18.2 变体 + SRG refmap | `build` + 单测 + dev server 启动 |
+| `fabric-1.20.1` | 已移植，1.20.1 变体 | `build` + 单测 + dev server 启动 |
+| `neoforge-26.1` | 已移植，26.1 变体 | `build` + 单测 |
+| `fabric-26.1` | 已移植，26.1 变体 | `build` + 单测 + dev server 启动 |
+
+验证边界：所有 target 都通过了编译、单测和 jar 内容检查；上表标注 dev server 的目标做过服务端启动冒烟。客户端渲染、客户端 Mixin 和双端联机没有可用的图形环境，未做运行时验证。`forge-1.18.2` 的 Forge 发行包本身不带 Mixin 运行时，Mixin 配置已随 jar 提供，但实际加载仍需要外部 Mixin bootstrap（详见该 target 的构建注释）。
 
 SPI 的边界：
 

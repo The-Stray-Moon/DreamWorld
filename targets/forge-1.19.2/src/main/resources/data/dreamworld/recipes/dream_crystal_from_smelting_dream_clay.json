@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:smelting",
+  "ingredient": {
+    "item": "dreamworld:dream_clay"
+  },
+  "result": {
+    "item": "dreamworld:dream_crystal",
+    "count": 1
+  },
+  "experience": 0.2,
+  "cookingtime": 200
+}

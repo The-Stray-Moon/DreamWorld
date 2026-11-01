@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    "dreamworld:dream_powder",
+    "minecraft:painting"
+  ],
+  "result": {
+    "count": 1,
+    "id": "dreamworld:dream_graffiti"
+  }
+}

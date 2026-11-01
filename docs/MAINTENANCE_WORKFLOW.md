@@ -162,9 +162,9 @@ targets/<name>/.../client/
 
 | Job | 目录 | Gradle JVM | 必须执行 |
 | --- | --- | --- | --- |
-| Forge 1.20.1 | `targets/forge-1.20.1` | JDK 21 | `./gradlew clean build` |
-| Forge 1.19.2 | `targets/forge-1.19.2` | JDK 21 | `./gradlew clean build` |
-| Forge 1.18.2 | `targets/forge-1.18.2` | JDK 21 | `./gradlew clean build` |
+| Forge 1.20.1 | `targets/forge-1.20.1` | JDK 17 | `./gradlew clean build` |
+| Forge 1.19.2 | `targets/forge-1.19.2` | JDK 17 | `./gradlew clean build` |
+| Forge 1.18.2 | `targets/forge-1.18.2` | JDK 17 | `./gradlew clean build` |
 | Fabric 1.20.1 | `targets/fabric-1.20.1` | JDK 17 | `./gradlew clean build` |
 | Fabric 1.21.1 | `targets/fabric-1.21.1` | JDK 21 | `./gradlew clean build` |
 | Fabric 26.1 | `targets/fabric-26.1` | JDK 25 | `./gradlew clean build` |
@@ -173,7 +173,7 @@ targets/<name>/.../client/
 
 补充规则：
 
-- 根 `-PallTargets=true build` 在 JDK 21 下仅覆盖可由 JDK 21 同时构建的 6 个 target（除 `fabric-26.1`、`neoforge-26.1` 外的全部 target）。它不是这两个 26.1 target 的验证替代品。
+- 根 `-PallTargets=true build` 只在同一个 Gradle JVM 能覆盖全部 target JDK 时使用；`fabric-26.1`、`neoforge-26.1` 需要 JDK 25，必须独立构建。日常验证请按 target 使用上表 JDK。
 - 任何改动 `common/` 的 PR，至少触发所有当前支持 target 的 build job。
 - 任何改动一个 target 的资源、Mixin 或 metadata 的 PR，至少检查最终 jar 是否包含对应 metadata、配置文件和 common class。
 - 构建成功不代替运行验证。涉及事件、网络、Mixin、注册、渲染或数据包时，应在 PR 中记录 client、dedicated server、reload 或 data generation 的实际验证范围。
@@ -194,7 +194,7 @@ targets/**/ci.properties
 
 1. `common-tests` 使用 JDK 21 执行 `common` 的 `test`。
 2. 八个 target job 并行执行各自 wrapper 的 `clean build`。`build` 包含 target 和 common 的测试任务。
-3. 每个 target 使用对应 JDK：`fabric-1.20.1` 使用 JDK 17；`fabric-26.1`、`neoforge-26.1` 使用 JDK 25；其余 target 使用 JDK 21。
+3. 每个 target 使用对应 JDK：1.20.1 及更早的 Forge/Fabric target 使用 JDK 17；1.21.1 系使用 JDK 21；`fabric-26.1`、`neoforge-26.1` 使用 JDK 25。
 4. 成功或失败时上传已生成的 `build/libs/*.jar`，便于检查发布物。
 
 `scripts/build-target.ps1` 对 target build 最多重试三次，专门处理首次解析 mappings、NeoForm 或 Maven 时的短暂网络失败。编译错误、测试错误和持续依赖错误仍会使 job 失败。
@@ -203,9 +203,9 @@ targets/**/ci.properties
 
 ```text
 Common Unit Tests
-forge-1.20.1 (JDK 21)
-forge-1.19.2 (JDK 21)
-forge-1.18.2 (JDK 21)
+forge-1.20.1 (JDK 17)
+forge-1.19.2 (JDK 17)
+forge-1.18.2 (JDK 17)
 fabric-1.20.1 (JDK 17)
 fabric-1.21.1 (JDK 21)
 fabric-26.1 (JDK 25)

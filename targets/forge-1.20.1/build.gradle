@@ -38,6 +38,9 @@ sourceSets {
     test {
         java.srcDir '../../common/src/test/java'
         resources.srcDir '../../common/src/test/resources'
+        // Unit tests touch Minecraft types (BlockPos/Vec3), so they need the mod classpath.
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
     }
 }
 
@@ -48,6 +51,35 @@ tasks.register('prepareCommonSources', Sync) {
         // implementation, for example
         //     exclude 'com/example/network/ChunkPacket.java'
         // Everything not listed here stays shared with every other target.
+
+        // 1.21 payload API (StreamCodec/CustomPacketPayload) does not exist before 1.20.5.
+        exclude 'cc/sighs/dreamworld/net/DWPayloads.java'
+
+        // SavedData.Factory, loadAdditional(CompoundTag, HolderLookup.Provider),
+        // MapCodec, Entity#defineSynchedData(Builder), ItemStack#hurtAndBreak(.., EquipmentSlot),
+        // Item#getUseDuration(ItemStack, LivingEntity), ResourceLocation.fromNamespaceAndPath,
+        // the 1.21 VertexConsumer (addVertex/setUv) and the 1.21 GuiGraphics text helper
+        // all differ from 1.20.1. Each of these files has a 1.20.1 implementation in this target.
+        exclude 'cc/sighs/dreamworld/block/DreamGraffitiBlock.java'
+        exclude 'cc/sighs/dreamworld/block/DreamGraffitiBlockEntity.java'
+        exclude 'cc/sighs/dreamworld/client/DreamBlink.java'
+        exclude 'cc/sighs/dreamworld/client/DreamHud.java'
+        exclude 'cc/sighs/dreamworld/client/DreamVisuals.java'
+        exclude 'cc/sighs/dreamworld/client/PetalSilhouette.java'
+        exclude 'cc/sighs/dreamworld/client/entity/BlubModel.java'
+        exclude 'cc/sighs/dreamworld/client/entity/BlubRenderer.java'
+        exclude 'cc/sighs/dreamworld/client/entity/DreamSpearRenderer.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamPatches.java'
+        exclude 'cc/sighs/dreamworld/dream/GraffitiRegistry.java'
+        exclude 'cc/sighs/dreamworld/entity/BlubEntity.java'
+        exclude 'cc/sighs/dreamworld/entity/DreamClayEntity.java'
+        exclude 'cc/sighs/dreamworld/entity/DreamSpearEntity.java'
+        exclude 'cc/sighs/dreamworld/item/DreamShovelItem.java'
+        exclude 'cc/sighs/dreamworld/item/DreamSpearItem.java'
+        exclude 'cc/sighs/dreamworld/item/DreamSwordItem.java'
+        exclude 'cc/sighs/dreamworld/item/DreamTeaItem.java'
+        exclude 'cc/sighs/dreamworld/item/DreamTier.java'
+        exclude 'cc/sighs/dreamworld/item/DreamWandItem.java'
     }
     into "$buildDir/generated/common-main"
 }
@@ -66,12 +98,17 @@ legacyForge {
             client()
             gameDirectory = file('run')
             systemProperty 'forge.enabledGameTestNamespaces', project.mod_id
+            // Forge 1.20.1 loads mixin configs from the jar manifest, which a dev run of a
+            // directory mod file does not have; the ModLauncher mixin service takes them here.
+            programArguments.addAll '--mixin.config', 'dreamworld.mixins.json',
+                    '--mixin.config', 'dreamworld.client.mixins.json'
         }
 
         server {
             server()
             programArgument '--nogui'
             systemProperty 'forge.enabledGameTestNamespaces', project.mod_id
+            programArguments.addAll '--mixin.config', 'dreamworld.mixins.json'
         }
 
         gameTestServer {
@@ -130,6 +167,10 @@ dependencies {
 }
 
 tasks.named('processResources', ProcessResources).configure {
+    // 1.20.1 reads data/dreamworld/recipes and data/dreamworld/loot_tables; the shared 1.21
+    // singular directories are replaced by this target's own copies.
+    exclude 'data/dreamworld/recipe/**'
+    exclude 'data/dreamworld/loot_table/**'
     def replaceProperties = [
             minecraft_version      : forge_minecraft_version,
             minecraft_version_range: minecraft_version_range,
@@ -159,7 +200,10 @@ tasks.named('jar', Jar).configure {
                     "Implementation-Title"    : project.name,
                     "Implementation-Version"  : project.jar.archiveVersion,
                     "Implementation-Vendor"   : mod_authors,
-                    "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")])
+                    "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                    // Forge 1.20.1 has no [[mixins]] block in mods.toml; Mixin reads the configs
+                    // from the mod jar manifest instead.
+                    "MixinConfigs"            : "dreamworld.mixins.json,dreamworld.client.mixins.json"])
     }
 
     finalizedBy 'reobfJar'
@@ -191,3 +235,33 @@ tasks.named('jacocoTestReport', JacocoReport).configure {
 }
 
 apply from: file('../../gradle/target-conventions/publish.gradle')
+
+// Forge runs SRG-named classes in production, so the mixin annotations need a refmap.
+dependencies {
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+}
+
+sourceSets.main.resources.srcDir "$buildDir/generated/mixins"
+def mixinRefmap = file("$buildDir/generated/mixins/dreamworld.refmap.json")
+
+tasks.named('compileJava', JavaCompile).configure {
+    def tsrg = file("$buildDir/moddev/artifacts/namedToIntermediate.tsrg")
+    dependsOn 'createMinecraftArtifacts'
+    doFirst {
+        mixinRefmap.parentFile.mkdirs()
+    }
+    options.compilerArgs += [
+            '-AreobfTsrgFile=' + tsrg.absolutePath,
+            '-AmappingTypes=tsrg',
+            '-AdefaultObfuscationEnv=searge',
+            '-AoutRefMapFile=' + mixinRefmap.absolutePath,
+            '-Aquiet=true'
+    ]
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    dependsOn 'compileJava'
+}
+tasks.named('jar', Jar).configure {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

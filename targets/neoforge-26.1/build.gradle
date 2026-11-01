@@ -33,6 +33,9 @@ sourceSets {
     test {
         java.srcDir '../../common/src/test/java'
         resources.srcDir '../../common/src/test/resources'
+        // Unit tests touch Minecraft types (BlockPos/Vec3), so they need the mod classpath.
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
     }
 }
 
@@ -43,6 +46,52 @@ tasks.register('prepareCommonSources', Sync) {
         // implementation, for example
         //     exclude 'com/example/network/ChunkPacket.java'
         // Everything not listed here stays shared with every other target.
+        //
+        // 26.1 replaced ResourceLocation with Identifier, moved boats to the boat
+        // package, and rewrote the entity, NBT, saved-data and rendering APIs; every
+        // listed file has a confirmed difference and is reimplemented under this
+        // target's src/main/java.
+        exclude 'cc/sighs/dreamworld/block/DreamGraffitiBlock.java'
+        exclude 'cc/sighs/dreamworld/block/DreamGraffitiBlockEntity.java'
+        exclude 'cc/sighs/dreamworld/boat/DreamBoatGate.java'
+        exclude 'cc/sighs/dreamworld/client/DWClientPayloadHandler.java'
+        exclude 'cc/sighs/dreamworld/client/DreamBlink.java'
+        exclude 'cc/sighs/dreamworld/client/DreamBlockTint.java'
+        exclude 'cc/sighs/dreamworld/client/DreamBoatControls.java'
+        exclude 'cc/sighs/dreamworld/client/DreamBoatTrail.java'
+        exclude 'cc/sighs/dreamworld/client/DreamClientPatches.java'
+        exclude 'cc/sighs/dreamworld/client/DreamHud.java'
+        exclude 'cc/sighs/dreamworld/client/DreamVisuals.java'
+        exclude 'cc/sighs/dreamworld/client/DreamWeather.java'
+        exclude 'cc/sighs/dreamworld/client/PetalSilhouette.java'
+        exclude 'cc/sighs/dreamworld/client/entity/BlubModel.java'
+        exclude 'cc/sighs/dreamworld/client/entity/BlubRenderer.java'
+        exclude 'cc/sighs/dreamworld/client/entity/DreamSpearRenderer.java'
+        exclude 'cc/sighs/dreamworld/client/particle/DreamPetalParticle.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamCommand.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamDamageRules.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamEntities.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamIntrusion.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamManager.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamMobs.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamPatchSync.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamPatches.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamSleepEvents.java'
+        exclude 'cc/sighs/dreamworld/dream/DreamWorldRules.java'
+        exclude 'cc/sighs/dreamworld/dream/GraffitiRegistry.java'
+        exclude 'cc/sighs/dreamworld/entity/BlubEntity.java'
+        exclude 'cc/sighs/dreamworld/entity/DreamClayEntity.java'
+        exclude 'cc/sighs/dreamworld/entity/DreamSpearEntity.java'
+        exclude 'cc/sighs/dreamworld/item/DreamShovelItem.java'
+        exclude 'cc/sighs/dreamworld/item/DreamSpearItem.java'
+        exclude 'cc/sighs/dreamworld/item/DreamSwordItem.java'
+        exclude 'cc/sighs/dreamworld/item/DreamTeaItem.java'
+        exclude 'cc/sighs/dreamworld/item/DreamTier.java'
+        exclude 'cc/sighs/dreamworld/item/DreamToolEvents.java'
+        exclude 'cc/sighs/dreamworld/item/DreamWandItem.java'
+        exclude 'cc/sighs/dreamworld/net/DWPayloads.java'
+        exclude 'cc/sighs/dreamworld/net/DreamPackets.java'
+        exclude 'cc/sighs/dreamworld/spi/DreamPlatform.java'
     }
     into "$buildDir/generated/common-main"
 }

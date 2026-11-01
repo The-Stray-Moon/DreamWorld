@@ -11,7 +11,7 @@ gradle/target-conventions/      所有 target 共用的构建约定
 ```
 
 - `common` 放所有没有确证版本差异的代码，包括引用 Minecraft 类型的那部分；依赖平台类型不是拆分理由，Java 版本也不是。
-- `common` 的独立编译基线是 `neoforge-1.21.1`（`common/build.gradle`、`common/gradle.properties`）。当前 1.21.1 系的 NeoForge 与 Fabric target 直接共享这棵树。
+- `common` 的独立编译基线是 `neoforge-1.21.1`（`common/build.gradle`、`common/gradle.properties`）。所有 target 都已移植主版本内容；1.21.1 系直接共享整棵树，其他版本在自己的 `prepareCommonSources` 中逐文件 `exclude` 并放入同名实现。
 - `targets/*` 只放该 target 的入口、注册、事件、Minecraft API、Mixin、网络、渲染和 metadata。
 - loader 差异通过 `common` 中的 `cc.sighs.dreamworld.spi` 暴露：`DreamPlatform`、`DreamNetwork`、`DreamConfig`、`DreamPersistentData`、`DreamHolder`。target 在入口安装实现，并把注册表对象绑定到 `DWObjects`；共通逻辑不得直接 import `net.neoforged.*` 或 `net.fabricmc.*`。
 - 版本差异（Minecraft API 变化）仍按文件登记：在 target 的 `prepareCommonSources` 中 `exclude` 对应 common 路径，并放入该版本自己的实现。
@@ -26,7 +26,7 @@ gradle/target-conventions/      所有 target 共用的构建约定
 
 | 内容 | 位置 | 规则 |
 | --- | --- | --- |
-| 共享 Java 代码 | `common/src/main/java/` | 放所有没有确证版本差异的代码，可引用 Minecraft 与 loader 类型；确证有版本差异的文件在该 target 的 `prepareCommonSources` 中 `exclude`。 |
+| 共享 Java 代码 | `common/src/main/java/` | 放所有没有确证版本差异的代码，可引用 Minecraft 类型；loader 能力经 `cc.sighs.dreamworld.spi` 注入。确证有版本差异的文件在该 target 的 `prepareCommonSources` 中 `exclude`。 |
 | 共享资源 | `common/src/main/resources/` | 会自动合并到所有 target 的最终 jar。 |
 | 目标专属资源 | `targets/<name>/src/main/resources/` | 仅放该版本/loader 专属资源。 |
 | Loader metadata | target 的 `src/main/resources/` | 保留在 target；Fabric、Forge、NeoForge 格式不可共用。 |
@@ -58,16 +58,16 @@ cd targets\forge-1.20.1
 
 | Target | Gradle JVM |
 | --- | --- |
-| `forge-1.20.1` | JDK 21 |
-| `forge-1.19.2` | JDK 21 |
-| `forge-1.18.2` | JDK 21 |
+| `forge-1.20.1` | JDK 17 |
+| `forge-1.19.2` | JDK 17 |
+| `forge-1.18.2` | JDK 17 |
 | `fabric-1.20.1` | JDK 17 |
 | `fabric-1.21.1` | JDK 21 |
 | `fabric-26.1` | JDK 25 |
 | `neoforge-1.21.1` | JDK 21 |
 | `neoforge-26.1` | JDK 25 |
 
-根项目的 `-PallTargets=true build` 在 JDK 21 下只能聚合除 `fabric-26.1`、`neoforge-26.1` 之外的 6 个 target；这两个 26.1 target 需要 JDK 25，必须独立构建。
+根项目的 `-PallTargets=true build` 只能在一个能覆盖所有目标 JDK 的 Gradle JVM 下使用；实际验证时建议按 target 单独构建。`forge-1.18.2`/`forge-1.19.2`/`forge-1.20.1` 使用 SRG refmap，`forge-1.18.2` 还要求运行环境提供 Mixin bootstrap。
 
 ### 发布
 

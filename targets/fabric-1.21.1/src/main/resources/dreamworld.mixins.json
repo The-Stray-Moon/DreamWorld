@@ -12,6 +12,7 @@
     "DreamVehicleMixin",
     "DreamEntityTrackingMixin",
     "PlayerSleepMixin",
+    "DreamBedCheckMixin",
     "GrindstoneSlot1Mixin",
     "GrindstoneSlot2Mixin",
     "GrindstoneMenuMixin",

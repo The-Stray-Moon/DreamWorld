@@ -1,0 +1,21 @@
+{
+  "required": true,
+  "package": "cc.sighs.dreamworld.mixin.client",
+  "mixins": [],
+  "client": [
+    "ClientLevelPatchMixin",
+    "MultiPlayerGameModeMixin",
+    "DreamInteractionMixin",
+    "DreamWeatherMixin",
+    "DreamPoseMixin",
+    "ModelBlockRendererTintMixin",
+    "DreamFluidTintMixin",
+    "MouseHandlerMixin",
+    "KeyboardHandlerMixin",
+    "EntityRenderDispatcherMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "minVersion": "0.8"
+}
