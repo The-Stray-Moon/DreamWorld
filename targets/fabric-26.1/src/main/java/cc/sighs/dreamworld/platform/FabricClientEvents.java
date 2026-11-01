@@ -4,7 +4,6 @@ import cc.sighs.dreamworld.DWObjects;
 import cc.sighs.dreamworld.DreamWorld;
 import cc.sighs.dreamworld.client.DWClientPayloadHandler;
 import cc.sighs.dreamworld.client.DreamBlink;
-import cc.sighs.dreamworld.client.DreamBlockTint;
 import cc.sighs.dreamworld.client.DreamBlockTintSource;
 import cc.sighs.dreamworld.client.DreamBoatTrail;
 import cc.sighs.dreamworld.client.DreamChunkEvents;
@@ -34,13 +33,10 @@ import net.minecraft.client.color.block.BlockColors;
 import net.minecraft.client.color.block.BlockTintSource;
 import net.minecraft.client.color.block.BlockTintSources;
 import net.minecraft.client.renderer.entity.ThrownItemRenderer;
-import net.minecraft.client.renderer.state.level.SkyRenderState;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
-import net.minecraft.util.ARGB;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 
@@ -62,10 +58,9 @@ public final class FabricClientEvents {
         });
 
         // 26.1 draws the level from submitted geometry: the tunnels go in with the custom geometry
-        // of the level pass, and the sky is overridden on the extracted render state.
+        // of the level pass; the dream sky and lighting are pinned through DreamAttributeMixin.
         LevelRenderEvents.COLLECT_SUBMITS.register(context -> DreamVisuals.render(
                 context.levelState(), context.poseStack(), context.submitNodeCollector()));
-        LevelRenderEvents.END_EXTRACTION.register(FabricClientEvents::overrideSky);
 
         HudElementRegistry.addLast(HUD_ELEMENT, (graphics, deltaTracker) -> {
             DreamHud.render(graphics);
@@ -118,22 +113,6 @@ public final class FabricClientEvents {
                             .toList();
             BlockColorRegistry.register(wrapped, block);
         }
-    }
-
-    /** The dream sky: permanent noon, the palette's sky colour and no stars. */
-    private static void overrideSky(
-            net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionContext context) {
-        if (!DreamClientState.isDreaming()) {
-            return;
-        }
-        SkyRenderState sky = context.levelState().skyRenderState;
-        Vec3 colour = DreamBlockTint.skyColor();
-        sky.skyColor = ARGB.colorFromFloat(1.0F, (float) colour.x, (float) colour.y,
-                (float) colour.z);
-        sky.sunAngle = 0.0F;
-        sky.starBrightness = 0.0F;
-        sky.rainBrightness = 1.0F;
-        sky.shouldRenderDarkDisc = false;
     }
 
     private static void registerClientReceivers() {

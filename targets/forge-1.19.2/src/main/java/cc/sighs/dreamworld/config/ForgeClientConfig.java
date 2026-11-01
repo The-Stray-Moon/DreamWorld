@@ -1,5 +1,6 @@
 package cc.sighs.dreamworld.config;
 
+import cc.sighs.dreamworld.spi.DreamColorMode;
 import net.minecraftforge.common.ForgeConfigSpec;
 
 /**
@@ -11,16 +12,17 @@ import net.minecraftforge.common.ForgeConfigSpec;
 public final class ForgeClientConfig {
     public static final ForgeConfigSpec SPEC;
 
-    private static final ForgeConfigSpec.BooleanValue SWAP_PALETTES;
+    private static final ForgeConfigSpec.EnumValue<DreamColorMode> COLOR_MODE;
     private static final ForgeConfigSpec.IntValue AMBIENT_SKY_LIGHT;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
-        SWAP_PALETTES = builder
-                .comment("Swap the hue wheels of the terrain and the water.",
-                        "Terrain normally uses the pink wheel and water the blue-green one;",
-                        "enabling this draws the terrain blue-green and the water pink.")
-                .define("swapPalettes", false);
+        COLOR_MODE = builder
+                .comment("How the dream layer colours terrain and water.",
+                        "MODE_1: terrain pink, water blue-green (the original look).",
+                        "MODE_2: terrain blue-green, water pink.",
+                        "RANDOM: pick MODE_1 or MODE_2 each time the client enters the dream.")
+                .defineEnum("colorMode", DreamColorMode.RANDOM);
         AMBIENT_SKY_LIGHT = builder
                 .comment("Sky light the dream layer pretends to have, 0 to 15.",
                         "The dream's underground is real terrain with no light sources in it, so it",
@@ -34,9 +36,9 @@ public final class ForgeClientConfig {
     private ForgeClientConfig() {
     }
 
-    /** {@return whether terrain and water draw with each other's hue wheel} */
-    public static boolean swapPalettes() {
-        return SWAP_PALETTES.get();
+    /** {@return how terrain and water are coloured} */
+    public static DreamColorMode colorMode() {
+        return COLOR_MODE.get();
     }
 
     /** {@return the sky light the dream lightmap never goes below, 0 to 15} */

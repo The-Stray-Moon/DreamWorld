@@ -1,6 +1,5 @@
 package cc.sighs.dreamworld.client;
 
-import cc.sighs.dreamworld.spi.DreamPlatform;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.ARGB;
 import net.minecraft.world.level.block.Blocks;
@@ -200,12 +199,12 @@ public final class DreamBlockTint {
 
     /** {@return the hue the terrain draws with, honouring the palette swap switch} */
     private static float terrainHue() {
-        return DreamPlatform.get().config().swapPalettes() ? WATER_HUE : BLOCK_HUE;
+        return DreamClientState.isPaletteSwapped() ? WATER_HUE : BLOCK_HUE;
     }
 
     /** {@return the hue the water draws with, honouring the palette swap switch} */
     private static float waterHue() {
-        return DreamPlatform.get().config().swapPalettes() ? BLOCK_HUE : WATER_HUE;
+        return DreamClientState.isPaletteSwapped() ? BLOCK_HUE : WATER_HUE;
     }
 
     /**

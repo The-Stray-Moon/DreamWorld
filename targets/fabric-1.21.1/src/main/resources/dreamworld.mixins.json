@@ -11,6 +11,8 @@
     "DreamHitboxMixin",
     "DreamVehicleMixin",
     "DreamEntityTrackingMixin",
+    "DreamBoatLavaMixin",
+    "DreamBoatFireMixin",
     "PlayerSleepMixin",
     "DreamBedCheckMixin",
     "GrindstoneSlot1Mixin",

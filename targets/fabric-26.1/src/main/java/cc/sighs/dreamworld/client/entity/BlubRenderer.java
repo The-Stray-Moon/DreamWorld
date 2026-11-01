@@ -4,6 +4,8 @@ import cc.sighs.dreamworld.DreamWorld;
 import cc.sighs.dreamworld.entity.BlubEntity;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.MobRenderer;
+import java.util.Map;
+import java.util.WeakHashMap;
 import net.minecraft.resources.Identifier;
 
 /**
@@ -13,6 +15,8 @@ import net.minecraft.resources.Identifier;
  * entity tick count travel through {@link BlubRenderState}.</p>
  */
 public class BlubRenderer extends MobRenderer<BlubEntity, BlubRenderState, BlubModel> {
+    private final Map<BlubEntity, BlubAnimationClips> clips = new WeakHashMap<>();
+
     private static final Identifier TEXTURE =
             Identifier.fromNamespaceAndPath(DreamWorld.MOD_ID, "textures/entity/blub.png");
 
@@ -30,6 +34,7 @@ public class BlubRenderer extends MobRenderer<BlubEntity, BlubRenderState, BlubM
         super.extractRenderState(blub, state, partialTicks);
         state.resting = blub.isDown();
         state.tickCount = blub.tickCount;
+        state.clips = this.clips.computeIfAbsent(blub, ignored -> new BlubAnimationClips());
     }
 
     @Override

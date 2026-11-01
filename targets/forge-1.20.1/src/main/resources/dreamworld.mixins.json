@@ -11,7 +11,9 @@
     "DreamSuffocationMixin",
     "DreamHitboxMixin",
     "DreamVehicleMixin",
-    "DreamEntityTrackingMixin"
+    "DreamEntityTrackingMixin",
+    "DreamBoatLavaMixin",
+    "DreamBoatFireMixin"
   ],
   "client": [],
   "injectors": {

@@ -8,6 +8,8 @@
     "BoatDreamMixin",
     "DWLivingEntityAccessor",
     "DreamEntityTrackingMixin",
+    "DreamBoatLavaMixin",
+    "DreamBoatFireMixin",
     "DreamHitboxMixin",
     "DreamMiningMixin",
     "DreamMoveMixin",

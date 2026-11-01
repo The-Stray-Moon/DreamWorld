@@ -94,35 +94,38 @@ public class BlubModel extends EntityModel<BlubRenderState> {
     @Override
     public void setupAnim(BlubRenderState state) {
         super.setupAnim(state);
-        if (state.resting != state.wasResting) {
-            state.wasResting = state.resting;
+        if (state.clips == null) {
+            return;
+        }
+        if (state.resting != state.clips.wasResting) {
+            state.clips.wasResting = state.resting;
             if (state.resting) {
-                state.lieDown.start(state.tickCount);
-                state.lying.stop();
-                state.getUp.stop();
+                state.clips.lieDown.start(state.tickCount);
+                state.clips.lying.stop();
+                state.clips.getUp.stop();
             } else {
-                state.getUp.start(state.tickCount);
-                state.lieDown.stop();
-                state.lying.stop();
+                state.clips.getUp.start(state.tickCount);
+                state.clips.lieDown.stop();
+                state.clips.lying.stop();
             }
         }
         if (state.resting) {
             animateResting(state);
             return;
         }
-        if (state.getUp.isStarted()) {
-            this.getUp.apply(state.getUp, state.ageInTicks);
-            if (state.getUp.getTimeInMillis(state.ageInTicks) >= GET_UP_MILLIS) {
-                state.getUp.stop();
+        if (state.clips.getUp.isStarted()) {
+            this.getUp.apply(state.clips.getUp, state.ageInTicks);
+            if (state.clips.getUp.getTimeInMillis(state.ageInTicks) >= GET_UP_MILLIS) {
+                state.clips.getUp.stop();
             }
             return;
         }
         if (state.walkAnimationSpeed > WALK_THRESHOLD) {
-            state.idle.stop();
+            state.clips.idle.stop();
             this.walk.applyWalk(state.walkAnimationPos, state.walkAnimationSpeed, 2.0F, 2.5F);
         } else {
-            state.idle.startIfStopped(state.tickCount);
-            this.idle.apply(state.idle, state.ageInTicks);
+            state.clips.idle.startIfStopped(state.tickCount);
+            this.idle.apply(state.clips.idle, state.ageInTicks);
         }
     }
 
@@ -133,15 +136,15 @@ public class BlubModel extends EntityModel<BlubRenderState> {
      * happens once the transition has run out.</p>
      */
     private void animateResting(BlubRenderState state) {
-        if (state.lieDown.isStarted()) {
-            this.lieDown.apply(state.lieDown, state.ageInTicks);
-            if (state.lieDown.getTimeInMillis(state.ageInTicks) >= LIE_DOWN_MILLIS) {
-                state.lieDown.stop();
-                state.lying.start(state.tickCount);
+        if (state.clips.lieDown.isStarted()) {
+            this.lieDown.apply(state.clips.lieDown, state.ageInTicks);
+            if (state.clips.lieDown.getTimeInMillis(state.ageInTicks) >= LIE_DOWN_MILLIS) {
+                state.clips.lieDown.stop();
+                state.clips.lying.start(state.tickCount);
             }
             return;
         }
-        state.lying.startIfStopped(state.tickCount);
-        this.lying.apply(state.lying, state.ageInTicks);
+        state.clips.lying.startIfStopped(state.tickCount);
+        this.lying.apply(state.clips.lying, state.ageInTicks);
     }
 }

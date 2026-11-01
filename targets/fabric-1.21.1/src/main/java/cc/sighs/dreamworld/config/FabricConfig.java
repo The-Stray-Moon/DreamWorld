@@ -1,5 +1,6 @@
 package cc.sighs.dreamworld.config;
 
+import cc.sighs.dreamworld.spi.DreamColorMode;
 import cc.sighs.dreamworld.spi.DreamConfig;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -10,6 +11,7 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import net.fabricmc.loader.api.FabricLoader;
 
 /**
@@ -22,7 +24,7 @@ public final class FabricConfig implements DreamConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final String FILE_NAME = "dreamworld.json";
 
-    private boolean swapPalettes = false;
+    private DreamColorMode colorMode = DreamColorMode.RANDOM;
     private int ambientSkyLight = 12;
     private int maxTunnelsPerGraffiti = 5;
     private int dreamEntryDelayTicks = 60;
@@ -40,7 +42,13 @@ public final class FabricConfig implements DreamConfig {
             if (json == null) {
                 return;
             }
-            swapPalettes = readBoolean(json, "swapPalettes", swapPalettes);
+            if (json.has("colorMode")) {
+                colorMode = parseColorMode(json.get("colorMode").getAsString());
+            } else if (json.has("swapPalettes")) {
+                // Old config files: false was the normal palette, true swapped it.
+                colorMode = json.get("swapPalettes").getAsBoolean()
+                        ? DreamColorMode.MODE_2 : DreamColorMode.MODE_1;
+            }
             ambientSkyLight = readInt(json, "ambientSkyLight", ambientSkyLight);
             maxTunnelsPerGraffiti = readInt(json, "maxTunnelsPerGraffiti", maxTunnelsPerGraffiti);
             dreamEntryDelayTicks = readInt(json, "dreamEntryDelayTicks", dreamEntryDelayTicks);
@@ -52,9 +60,17 @@ public final class FabricConfig implements DreamConfig {
         }
     }
 
+    private static DreamColorMode parseColorMode(String value) {
+        try {
+            return DreamColorMode.valueOf(value.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ignored) {
+            return DreamColorMode.RANDOM;
+        }
+    }
+
     private void save(Path path) {
         JsonObject json = new JsonObject();
-        json.addProperty("swapPalettes", swapPalettes);
+        json.addProperty("colorMode", colorMode.name().toLowerCase(Locale.ROOT));
         json.addProperty("ambientSkyLight", ambientSkyLight);
         json.addProperty("maxTunnelsPerGraffiti", maxTunnelsPerGraffiti);
         json.addProperty("dreamEntryDelayTicks", dreamEntryDelayTicks);
@@ -70,10 +86,6 @@ public final class FabricConfig implements DreamConfig {
         }
     }
 
-    private static boolean readBoolean(JsonObject json, String key, boolean fallback) {
-        return json.has(key) ? json.get(key).getAsBoolean() : fallback;
-    }
-
     private static int readInt(JsonObject json, String key, int fallback) {
         return json.has(key) ? json.get(key).getAsInt() : fallback;
     }
@@ -83,8 +95,8 @@ public final class FabricConfig implements DreamConfig {
     }
 
     @Override
-    public boolean swapPalettes() {
-        return swapPalettes;
+    public DreamColorMode colorMode() {
+        return colorMode;
     }
 
     @Override

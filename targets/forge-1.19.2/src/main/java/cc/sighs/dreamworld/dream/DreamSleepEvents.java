@@ -1,6 +1,7 @@
 package cc.sighs.dreamworld.dream;
 
 import cc.sighs.dreamworld.DWObjects;
+import cc.sighs.dreamworld.entity.BlubEntity;
 import cc.sighs.dreamworld.entity.DreamClayEntity;
 import cc.sighs.dreamworld.spi.DreamPlatform;
 import java.util.HashMap;
@@ -69,6 +70,22 @@ public final class DreamSleepEvents {
      *
      * @param fallback the delay on that direction used when no graffiti is near
      */
+    private static final double BLUB_SLEEP_RADIUS = 2.0D;
+
+    /** {@return whether a Blub stands within two blocks of the player} */
+    private static boolean isNearBlub(ServerPlayer player) {
+        if (!(player.level instanceof ServerLevel level)) {
+            return false;
+        }
+        for (BlubEntity blub : level.getEntitiesOfClass(BlubEntity.class,
+                player.getBoundingBox().inflate(BLUB_SLEEP_RADIUS))) {
+            if (blub.distanceToSqr(player) <= BLUB_SLEEP_RADIUS * BLUB_SLEEP_RADIUS) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static int sleepDelay(ServerPlayer player, int fallback) {
         if (!(player.level instanceof ServerLevel level)) {
             return fallback;
@@ -170,7 +187,8 @@ public final class DreamSleepEvents {
                 if (player == null
                         || DreamManager.isDreaming(player)
                         || !player.isSleeping()
-                        || !DreamPlatform.get().hasEffect(player, DWObjects.DREAM_WALK)) {
+                        || (!DreamPlatform.get().hasEffect(player, DWObjects.DREAM_WALK)
+                        && !isNearBlub(player))) {
                     iterator.remove();
                     continue;
                 }

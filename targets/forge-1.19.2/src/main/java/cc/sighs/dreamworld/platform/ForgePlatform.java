@@ -4,6 +4,7 @@ import cc.sighs.dreamworld.DWObjects;
 import cc.sighs.dreamworld.config.ForgeClientConfig;
 import cc.sighs.dreamworld.config.ForgeServerConfig;
 import cc.sighs.dreamworld.spi.DreamConfig;
+import cc.sighs.dreamworld.spi.DreamColorMode;
 import cc.sighs.dreamworld.spi.DreamHolder;
 import cc.sighs.dreamworld.spi.DreamNetwork;
 import cc.sighs.dreamworld.spi.DreamPersistentData;
@@ -47,8 +48,8 @@ public final class ForgePlatform implements DreamPlatform {
     public DreamConfig config() {
         return new DreamConfig() {
             @Override
-            public boolean swapPalettes() {
-                return ForgeClientConfig.swapPalettes();
+            public DreamColorMode colorMode() {
+                return ForgeClientConfig.colorMode();
             }
 
             @Override

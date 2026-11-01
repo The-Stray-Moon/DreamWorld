@@ -3,7 +3,6 @@ package cc.sighs.dreamworld.platform;
 import cc.sighs.dreamworld.DWObjects;
 import cc.sighs.dreamworld.DreamWorld;
 import cc.sighs.dreamworld.client.DreamBlink;
-import cc.sighs.dreamworld.client.DreamBlockTint;
 import cc.sighs.dreamworld.client.DreamBlockTintSource;
 import cc.sighs.dreamworld.client.DreamBoatControls;
 import cc.sighs.dreamworld.client.DreamBoatTrail;
@@ -21,21 +20,17 @@ import cc.sighs.dreamworld.client.particle.DreamPetalParticle;
 import cc.sighs.dreamworld.dream.DreamWorldRules;
 import net.minecraft.client.color.block.BlockTintSource;
 import net.minecraft.client.renderer.entity.ThrownItemRenderer;
-import net.minecraft.client.renderer.state.level.SkyRenderState;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
-import net.minecraft.util.ARGB;
 import net.minecraft.util.context.ContextKey;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
-import net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RegisterColorHandlersEvent;
 import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
@@ -108,26 +103,6 @@ public final class NeoForgeClientEvents {
     public static void onChunkLoad(ChunkEvent.Load event) {
         DreamChunkEvents.onChunkLoad(event.getLevel().isClientSide(),
                 net.minecraft.world.level.ChunkPos.pack(event.getChunk().getPos().x(), event.getChunk().getPos().z()));
-    }
-
-    /**
-     * The dream sky: permanent noon, the palette's sky colour and no stars.
-     *
-     * <p>26.1 extracts the sky into {@link SkyRenderState}, so the 1.21 client-level patches are
-     * replaced by an override of the extracted state.</p>
-     */
-    @SubscribeEvent
-    public static void onExtractLevelRenderState(ExtractLevelRenderStateEvent event) {
-        if (!DreamClientState.isDreaming()) {
-            return;
-        }
-        SkyRenderState sky = event.getRenderState().skyRenderState;
-        Vec3 colour = DreamBlockTint.skyColor();
-        sky.skyColor = ARGB.colorFromFloat(1.0F, (float) colour.x, (float) colour.y, (float) colour.z);
-        sky.sunAngle = 0.0F;
-        sky.starBrightness = 0.0F;
-        sky.rainBrightness = 1.0F;
-        sky.shouldRenderDarkDisc = false;
     }
 
     @SubscribeEvent

@@ -1,6 +1,9 @@
 package cc.sighs.dreamworld.client;
 
+import cc.sighs.dreamworld.spi.DreamColorMode;
+import cc.sighs.dreamworld.spi.DreamPlatform;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.core.BlockPos;
 
 /**
@@ -20,6 +23,8 @@ public final class DreamClientState {
     /** Whether the server has told this client which layer it should show in this session. */
     private static volatile boolean dreamStateKnown;
     private static volatile boolean anchorBound;
+    /** Colour mode chosen for the current dream entry. */
+    private static volatile boolean paletteSwapped;
     private static volatile List<BlockPos> graffiti = List.of();
     private static volatile int maxTunnelsPerGraffiti = 5;
     private static volatile java.util.Set<java.util.UUID> dreamers = java.util.Set.of();
@@ -33,8 +38,19 @@ public final class DreamClientState {
     }
 
     public static void setDreaming(boolean value) {
+        if (value && !dreaming) {
+            DreamColorMode mode = DreamPlatform.get().config().colorMode();
+            paletteSwapped = mode.swaps(ThreadLocalRandom.current().nextBoolean());
+        } else if (!value) {
+            paletteSwapped = false;
+        }
         dreaming = value;
         dreamStateKnown = true;
+    }
+
+    /** {@return whether this dream entry swaps the terrain and water hue wheels} */
+    public static boolean isPaletteSwapped() {
+        return paletteSwapped;
     }
 
     /**
@@ -104,6 +120,7 @@ public final class DreamClientState {
         dreaming = false;
         dreamStateKnown = false;
         anchorBound = false;
+        paletteSwapped = false;
         graffiti = List.of();
         maxTunnelsPerGraffiti = 5;
         dreamers = java.util.Set.of();

@@ -2,7 +2,7 @@ package cc.sighs.dreamworld.spi;
 
 /** Current values of the mod's client and server settings. */
 public interface DreamConfig {
-    boolean swapPalettes();
+    DreamColorMode colorMode();
 
     int ambientSkyLight();
 

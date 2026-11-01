@@ -1,6 +1,7 @@
 package cc.sighs.dreamworld.dream;
 
 import cc.sighs.dreamworld.DWObjects;
+import cc.sighs.dreamworld.entity.BlubEntity;
 import cc.sighs.dreamworld.entity.DreamClayEntity;
 import cc.sighs.dreamworld.spi.DreamPlatform;
 import java.util.HashMap;
@@ -69,9 +70,28 @@ public final class DreamSleepEvents {
      *
      * @param fallback the delay on that direction used when no graffiti is near
      */
+    private static final double BLUB_SLEEP_RADIUS = 2.0D;
+
+    /** {@return whether a Blub stands within two blocks of the player} */
+    private static boolean isNearBlub(ServerPlayer player) {
+        if (!(player.level() instanceof ServerLevel level)) {
+            return false;
+        }
+        for (BlubEntity blub : level.getEntitiesOfClass(BlubEntity.class,
+                player.getBoundingBox().inflate(BLUB_SLEEP_RADIUS))) {
+            if (blub.distanceToSqr(player) <= BLUB_SLEEP_RADIUS * BLUB_SLEEP_RADIUS) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static int sleepDelay(ServerPlayer player, int fallback) {
         if (!(player.level() instanceof ServerLevel level)) {
             return fallback;
+        }
+        if (isNearBlub(player)) {
+            return 1;
         }
         double range = DreamPlatform.get().config().graffitiSleepRange();
         if (range <= 0.0D) {
@@ -137,7 +157,8 @@ public final class DreamSleepEvents {
      */
     private static boolean canSleepOnGround(ServerPlayer player, ServerLevel level) {
         boolean dreamWalk = DreamPlatform.get().hasEffect(player, DWObjects.DREAM_WALK);
-        return (dreamWalk || level.isNight())
+        boolean nearBlub = isNearBlub(player);
+        return (dreamWalk || nearBlub || level.isNight())
                 && player.onGround()
                 && !player.isPassenger()
                 && !player.isSleeping()
@@ -148,7 +169,7 @@ public final class DreamSleepEvents {
     private static void startGroundSleep(ServerPlayer player, ServerLevel level, BlockPos pos) {
         player.startSleeping(pos);
         level.updateSleepingPlayerList();
-        if (!DreamPlatform.get().hasEffect(player, DWObjects.DREAM_WALK)) {
+        if (!DreamPlatform.get().hasEffect(player, DWObjects.DREAM_WALK) && !isNearBlub(player)) {
             return;
         }
         // From here the sleep is only the doorway: the body stays in bed until the delay ran out,
@@ -170,7 +191,8 @@ public final class DreamSleepEvents {
                 if (player == null
                         || DreamManager.isDreaming(player)
                         || !player.isSleeping()
-                        || !DreamPlatform.get().hasEffect(player, DWObjects.DREAM_WALK)) {
+                        || (!DreamPlatform.get().hasEffect(player, DWObjects.DREAM_WALK)
+                        && !isNearBlub(player))) {
                     iterator.remove();
                     continue;
                 }

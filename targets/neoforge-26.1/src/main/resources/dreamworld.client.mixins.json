@@ -9,7 +9,9 @@
     "DreamWeatherMixin",
     "DreamPoseMixin",
     "ModelBlockRendererTintMixin",
-    "DreamFluidTintMixin"
+    "DreamFluidTintMixin",
+    "DreamSunMixin",
+    "DreamAttributeMixin"
   ],
   "injectors": {
     "defaultRequire": 1

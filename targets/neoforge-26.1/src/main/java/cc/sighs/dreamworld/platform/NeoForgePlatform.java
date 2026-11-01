@@ -6,6 +6,7 @@ import cc.sighs.dreamworld.config.DreamServerConfig;
 import cc.sighs.dreamworld.effect.DreamWalkEffect;
 import cc.sighs.dreamworld.item.NeoForgeDreamCrystalItem;
 import cc.sighs.dreamworld.spi.DreamConfig;
+import cc.sighs.dreamworld.spi.DreamColorMode;
 import cc.sighs.dreamworld.spi.DreamHolder;
 import cc.sighs.dreamworld.spi.DreamNetwork;
 import cc.sighs.dreamworld.spi.DreamPersistentData;
@@ -60,8 +61,8 @@ public final class NeoForgePlatform implements DreamPlatform {
     public DreamConfig config() {
         return new DreamConfig() {
             @Override
-            public boolean swapPalettes() {
-                return DreamClientConfig.swapPalettes();
+            public DreamColorMode colorMode() {
+                return DreamClientConfig.colorMode();
             }
 
             @Override

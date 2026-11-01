@@ -10,6 +10,8 @@
     "DreamPoseMixin",
     "ModelBlockRendererTintMixin",
     "DreamFluidTintMixin",
+    "DreamSunMixin",
+    "DreamAttributeMixin",
     "MouseHandlerMixin",
     "KeyboardHandlerMixin",
     "EntityRenderDispatcherMixin"
