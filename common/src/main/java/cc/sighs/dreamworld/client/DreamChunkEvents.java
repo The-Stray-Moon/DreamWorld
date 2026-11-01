@@ -62,6 +62,7 @@ public final class DreamChunkEvents {
     public static void resetSession() {
         DreamClientState.reset();
         DreamClientPatches.reset();
+        DreamHud.reset();
         lastDreaming = false;
         sweepTicks = 0;
         holdPosition = null;

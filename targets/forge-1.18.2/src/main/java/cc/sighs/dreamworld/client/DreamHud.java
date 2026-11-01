@@ -3,13 +3,12 @@ package cc.sighs.dreamworld.client;
 import cc.sighs.dreamworld.DWObjects;
 import cc.sighs.dreamworld.boat.DreamTunnelBoat;
 import cc.sighs.dreamworld.boat.TunnelGeometry;
-import com.mojang.blaze3d.vertex.PoseStack;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.TextComponent;
 import net.minecraft.network.chat.TranslatableComponent;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
@@ -19,38 +18,68 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.ForgeMod;
 
 /**
- * Hotbar hints of the dream world.
+ * Action-bar hints of the dream world.
  *
- * <p>The strip above the hotbar carries reversing and leaving a graffiti tunnel, what the crosshair
- * is pointing at when it points at one, and the way to clear an anchor that blocks a second spear.
- * Hints are stacked upwards, the last list entry closest to the hotbar.</p>
+ * <p>The bar carries reversing and leaving a graffiti tunnel, what the crosshair is pointing at when
+ * it points at one, and the way to clear an anchor that blocks a second spear. The hints are joined
+ * into one line and sent through {@link Player#displayClientMessage}; an unchanged line is refreshed
+ * before vanilla's 60-tick overlay timer runs out, and an empty hint clears the bar.</p>
  *
- * <p>1.18.2 draws through a {@link PoseStack} and uses {@link TranslatableComponent}.</p>
+ * <p>1.18.2 still builds its translated text through {@link TranslatableComponent}.</p>
  */
 public final class DreamHud {
     /** How far the crosshair reaches when looking for a tunnel to point at. */
     private static final double TUNNEL_AIM_REACH = DreamVisuals.AIM_REACH;
     /** How far off the line the crosshair may be and still count as pointing at a tunnel. */
     private static final double TUNNEL_AIM_RADIUS = DreamVisuals.AIM_RADIUS;
-    /** Height of the hotbar texture, from the bottom of the screen. */
-    private static final int HOTBAR_HEIGHT = 22;
-    /** Vertical step between two stacked hints. */
-    private static final int LINE_HEIGHT = 11;
-    private static final int HINT_COLOR = 0xFFB8EAFF;
-    private static final int BACKDROP_COLOR = 0x66000000;
+    /** Ticks between two sends of an unchanged line; vanilla hides it after 60 ticks. */
+    private static final int REFRESH_TICKS = 40;
+
+    /** The last line sent to the action bar, so an unchanged hint is not re-sent every tick. */
+    private static String lastHint = "";
+    private static int ticksSinceHint;
 
     private DreamHud() {
     }
 
-    public static void render(PoseStack poseStack) {
+    /** Sends or refreshes the action-bar hint for this client tick. */
+    public static void tick() {
         Minecraft minecraft = Minecraft.getInstance();
         Player player = minecraft.player;
-        if (player == null || minecraft.options.hideGui) {
+        if (player == null) {
+            reset();
             return;
         }
-        List<Component> hints = new ArrayList<>(3);
-        boolean onTunnel = isOnTunnel(player);
-        if (onTunnel) {
+        List<Component> hints = hints(player);
+        if (hints.isEmpty()) {
+            clear(player);
+            return;
+        }
+        Component line = join(hints);
+        if (!line.getString().equals(lastHint) || ++ticksSinceHint >= REFRESH_TICKS) {
+            player.displayClientMessage(line, true);
+            lastHint = line.getString();
+            ticksSinceHint = 0;
+        }
+    }
+
+    /** Drops the remembered line, for example when the client leaves the world. */
+    public static void reset() {
+        lastHint = "";
+        ticksSinceHint = 0;
+    }
+
+    private static void clear(Player player) {
+        if (lastHint.isEmpty()) {
+            return;
+        }
+        player.displayClientMessage(new TextComponent(""), true);
+        reset();
+    }
+
+    private static List<Component> hints(Player player) {
+        List<Component> hints = new ArrayList<>(4);
+        if (isOnTunnel(player)) {
             hints.add(new TranslatableComponent("hud.dreamworld.reverse_tunnel"));
             hints.add(new TranslatableComponent("hud.dreamworld.leave_tunnel"));
         }
@@ -58,23 +87,22 @@ public final class DreamHud {
         if (aimHint != null) {
             hints.add(aimHint);
         }
-        if (holdsSpear(player) && DreamClientState.isAnchorBound()) {
+        if (holdsSpear(player) && DreamClientState.isAnchorBound(DreamClientState.isDreaming())) {
             hints.add(new TranslatableComponent("hud.dreamworld.destroy_anchor"));
         }
-        if (hints.isEmpty()) {
-            return;
-        }
-        Font font = minecraft.font;
-        int x = minecraft.getWindow().getGuiScaledWidth() / 2;
+        return hints;
+    }
+
+    /** Joins the hints into the single line an action bar can show. */
+    private static Component join(List<Component> hints) {
+        MutableComponent line = new TextComponent("");
         for (int index = 0; index < hints.size(); index++) {
-            Component hint = hints.get(index);
-            int width = font.width(hint);
-            int y = minecraft.getWindow().getGuiScaledHeight() - HOTBAR_HEIGHT - 12
-                    - (hints.size() - 1 - index) * LINE_HEIGHT;
-            GuiComponent.fill(poseStack, x - width / 2 - 2, y - 1, x + width / 2 + 2, y + 9,
-                    BACKDROP_COLOR);
-            font.drawShadow(poseStack, hint, (float) (x - width / 2), (float) y, HINT_COLOR);
+            if (index > 0) {
+                line.append(new TextComponent("  "));
+            }
+            line.append(hints.get(index));
         }
+        return line;
     }
 
     /**

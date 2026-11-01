@@ -63,7 +63,8 @@ public final class DWClientPayloadHandler {
     }
 
     public static void handleAnchorState(DreamPackets.AnchorState payload) {
-        DreamClientState.setAnchorBound(payload.bound());
+        DreamClientState.setAnchorBound(false, payload.realSideBound());
+        DreamClientState.setAnchorBound(true, payload.dreamSideBound());
     }
 
     public static void handleDreamers(DreamPackets.Dreamers payload) {

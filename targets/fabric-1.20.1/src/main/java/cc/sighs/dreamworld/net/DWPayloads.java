@@ -212,13 +212,15 @@ public final class DWPayloads {
         }
     }
 
-    public record AnchorStatePayload(boolean bound) implements FabricPacket {
+    public record AnchorStatePayload(boolean realSideBound, boolean dreamSideBound)
+            implements FabricPacket {
         public static final PacketType<AnchorStatePayload> TYPE = PacketType.create(id("anchor_state"),
-                buffer -> new AnchorStatePayload(buffer.readBoolean()));
+                buffer -> new AnchorStatePayload(buffer.readBoolean(), buffer.readBoolean()));
 
         @Override
         public void write(FriendlyByteBuf buffer) {
-            buffer.writeBoolean(bound);
+            buffer.writeBoolean(realSideBound);
+            buffer.writeBoolean(dreamSideBound);
         }
 
         @Override
@@ -227,7 +229,7 @@ public final class DWPayloads {
         }
 
         public DreamPackets.AnchorState common() {
-            return new DreamPackets.AnchorState(bound);
+            return new DreamPackets.AnchorState(realSideBound, dreamSideBound);
         }
     }
 

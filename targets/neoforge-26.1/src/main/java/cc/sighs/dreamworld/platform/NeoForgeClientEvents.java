@@ -64,6 +64,7 @@ public final class NeoForgeClientEvents {
         DreamBlink.tick();
         DreamWeather.tick();
         DreamBoatTrail.tick();
+        DreamHud.tick();
     }
 
     /** The graffiti tunnels, submitted as custom geometry of the level pass. */
@@ -75,7 +76,6 @@ public final class NeoForgeClientEvents {
 
     @SubscribeEvent
     public static void onRenderGui(RenderGuiEvent.Post event) {
-        DreamHud.render(event.getGuiGraphics());
         DreamBlink.renderGui(event.getGuiGraphics());
     }
 

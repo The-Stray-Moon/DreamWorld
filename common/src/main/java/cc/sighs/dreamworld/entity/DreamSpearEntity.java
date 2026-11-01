@@ -409,10 +409,9 @@ public class DreamSpearEntity extends Entity implements ItemSupplier {
     }
 
     /**
-     * Binds or clears this spear as the thrower's dream anchor, so intrusions performed while
-     * dreaming land on the spear instead of the dreamer's own coordinates. The layer the spear was
-     * thrown on is handed over with it, because the anchor only redirects intrusions from the other
-     * layer.
+     * Binds or clears this spear in the slot of the layer it was thrown on. The anchor moves the
+     * thrower's reference position on that layer, so intrusions and dream transitions keep their
+     * player-relative offset across the mirror.
      */
     private void syncAnchorToOwner(@Nullable java.util.UUID ownerId, boolean bound) {
         if (!(level() instanceof ServerLevel serverLevel) || ownerId == null) {
@@ -423,7 +422,7 @@ public class DreamSpearEntity extends Entity implements ItemSupplier {
             return;
         }
         if (!bound) {
-            DreamManager.clearAnchor(ownerPlayer);
+            DreamManager.clearAnchor(ownerPlayer, dreamSide());
         } else if (this.anchoredEntity != null) {
             DreamManager.setEntityAnchor(ownerPlayer, this.anchoredEntity, dreamSide());
         } else {
@@ -441,9 +440,9 @@ public class DreamSpearEntity extends Entity implements ItemSupplier {
      * Destroys this anchor: the binding is cleared, the chunk is released and the spear is removed
      * without returning the item.
      *
-     * <p>This is the way out of the one-spear rule. A player who already has an anchor bound cannot
-     * throw another spear, and the hotbar hint offers this as the alternative - the anchor is lost,
-     * not picked up, so a throw is always an explicit trade.</p>
+     * <p>This is the way out of the one-spear-per-layer rule. A player who already has an anchor on
+     * that layer cannot throw another spear, and the hotbar hint offers this as the alternative -
+     * the anchor is lost, not picked up, so a throw is always an explicit trade.</p>
      */
     public void destroyAnchor() {
         syncAnchorToOwner(this.owner, false);

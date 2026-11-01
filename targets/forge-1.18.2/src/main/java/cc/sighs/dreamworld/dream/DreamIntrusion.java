@@ -82,8 +82,8 @@ public final class DreamIntrusion {
      * the oldest state of a position, so the recorder alone would keep the air that was stored when
      * the block was originally placed and the broken block would never show up in the dream.</p>
      *
-     * <p>A dream-side anchor redirects the whole transfer: the block leaves reality at {@code pos}
-     * and appears in the dream at the anchored position instead of the mirrored coordinates.</p>
+     * <p>The transfer keeps the block's offset from the player, so a real-side anchor moves the
+     * copy to wherever the player's dream-side reference is.</p>
      */
     private static void breakRealBlock(ServerPlayer actor, ServerLevel level, BlockPos pos) {
         BlockState carried = level.getBlockState(pos);
@@ -174,8 +174,7 @@ public final class DreamIntrusion {
      * Moves a creature to the opposite layer instead of killing it.
      *
      * <p>An intrusion is never a death: the creature leaves the layer it stood on without triggering
-     * a death event or loot, and a copy appears on the other layer at the same position (or at the
-     * anchor, when one is bound). The copy follows the layer it lands on - asleep and inert in the
+     * a death event or loot, and a copy appears on the other layer at the player-relative position. The copy follows the layer it lands on - asleep and inert in the
      * dream, awake and simulated back in reality - and belongs to that layer only: dream copies are
      * kept away from players that are not dreaming.</p>
      */

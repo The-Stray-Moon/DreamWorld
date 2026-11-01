@@ -44,7 +44,8 @@ public final class DreamPackets {
             implements DreamPacket {
     }
 
-    public record AnchorState(boolean bound) implements DreamPacket {
+    /** Which layers currently have a bound anchor. */
+    public record AnchorState(boolean realSideBound, boolean dreamSideBound) implements DreamPacket {
     }
 
     public record Dreamers(List<UUID> dreamers) implements DreamPacket {

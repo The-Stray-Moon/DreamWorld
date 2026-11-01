@@ -167,17 +167,18 @@ public final class ForgeMessages {
         }
     }
 
-    public record AnchorState(boolean bound) {
+    public record AnchorState(boolean realSideBound, boolean dreamSideBound) {
         public static void encode(AnchorState message, FriendlyByteBuf buffer) {
-            buffer.writeBoolean(message.bound());
+            buffer.writeBoolean(message.realSideBound());
+            buffer.writeBoolean(message.dreamSideBound());
         }
 
         public static AnchorState decode(FriendlyByteBuf buffer) {
-            return new AnchorState(buffer.readBoolean());
+            return new AnchorState(buffer.readBoolean(), buffer.readBoolean());
         }
 
         public DreamPackets.AnchorState common() {
-            return new DreamPackets.AnchorState(bound);
+            return new DreamPackets.AnchorState(realSideBound, dreamSideBound);
         }
     }
 

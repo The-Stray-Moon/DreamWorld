@@ -26,7 +26,7 @@ public abstract class BlockRenderDispatcherMixin {
                     + "Lnet/minecraft/world/level/BlockAndTintGetter;"
                     + "Lcom/mojang/blaze3d/vertex/PoseStack;"
                     + "Lcom/mojang/blaze3d/vertex/VertexConsumer;"
-                    + "ZLnet/minecraft/util/Random;"
+                    + "ZLjava/util/Random;"
                     + "Lnet/minecraftforge/client/model/data/IModelData;)Z";
 
     @Inject(method = RENDER_BATCHED, at = @At("HEAD"), remap = false)

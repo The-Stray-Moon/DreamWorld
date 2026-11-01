@@ -56,6 +56,7 @@ public final class ForgeClientEvents {
         DreamBlink.tick();
         DreamWeather.tick();
         DreamBoatTrail.tick();
+        DreamHud.tick();
     }
 
     @SubscribeEvent
@@ -63,13 +64,12 @@ public final class ForgeClientEvents {
         if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_LEVEL) {
             DreamBlink.renderLevel(event.getPartialTick());
         } else if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
-            DreamVisuals.render(event.getCamera());
+            DreamVisuals.render(event.getCamera(), event.getPoseStack());
         }
     }
 
     @SubscribeEvent
     public static void onRenderGui(RenderGuiEvent.Post event) {
-        DreamHud.render(event.getGuiGraphics());
         DreamBlink.renderGui(event.getGuiGraphics());
     }
 

@@ -5,6 +5,7 @@ import cc.sighs.dreamworld.boat.TunnelGeometry;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import java.util.ArrayList;
@@ -57,11 +58,11 @@ public final class DreamVisuals {
     public record TunnelEdge(BlockPos from, BlockPos to) {
     }
 
-    public static void render(Camera camera) {
+    public static void render(Camera camera, PoseStack poseStack) {
         if (!DreamClientState.isDreaming() || Minecraft.getInstance().level == null) {
             return;
         }
-        renderTunnels(camera);
+        renderTunnels(camera, poseStack);
     }
 
 
@@ -118,7 +119,7 @@ public final class DreamVisuals {
                 .toList();
     }
 
-    private static void renderTunnels(Camera camera) {
+    private static void renderTunnels(Camera camera, PoseStack poseStack) {
         List<TunnelEdge> tunnels = tunnels();
         if (tunnels.isEmpty()) {
             return;
@@ -173,11 +174,22 @@ public final class DreamVisuals {
         RenderSystem.depthMask(false);
         Tesselator tesselator = Tesselator.getInstance();
         BufferBuilder buffer = tesselator.getBuilder();
+        // 1.20.1 does not put the camera rotation on the RenderSystem model-view stack for this
+        // stage, unlike 1.21.1's LevelRenderer. The ribbon vertices are camera-relative, so without
+        // applying the event's pose the whole tunnel stays in view space and flies off as the camera
+        // turns. Push and restore it so the clouds and weather that follow keep the vanilla matrix.
+        PoseStack modelView = RenderSystem.getModelViewStack();
+        modelView.pushPose();
+        modelView.setIdentity();
+        modelView.mulPoseMatrix(poseStack.last().pose());
+        RenderSystem.applyModelViewMatrix();
         buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
         // Plain first: with the depth test off, the highlighted ribbons land on top of them.
         plain.forEach(ribbon -> dreamworld$ribbon(buffer, ribbon));
         highlighted.forEach(ribbon -> dreamworld$ribbon(buffer, ribbon));
         tesselator.end();
+        modelView.popPose();
+        RenderSystem.applyModelViewMatrix();
         RenderSystem.depthMask(true);
         RenderSystem.enableDepthTest();
         RenderSystem.enableCull();

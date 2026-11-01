@@ -90,7 +90,8 @@ public final class FabricNetwork implements DreamNetwork {
                     blast.radius(), blast.count());
         }
         if (packet instanceof DreamPackets.AnchorState anchor) {
-            return new DWPayloads.AnchorStatePayload(anchor.bound());
+            return new DWPayloads.AnchorStatePayload(anchor.realSideBound(),
+                    anchor.dreamSideBound());
         }
         if (packet instanceof DreamPackets.Dreamers dreamers) {
             return new DWPayloads.DreamersPayload(List.copyOf(dreamers.dreamers()));

@@ -33,8 +33,8 @@ import net.minecraft.world.phys.Vec3;
  * the charge has to last {@link #THROW_THRESHOLD_TIME} ticks. The spear is spawned with the same
  * launch speed and aim spread as a trident, plays the same throw sound, is removed from the inventory
  * on the server unless the thrower has infinite materials, and the use is counted in the item-used
- * statistic on both sides. A single player may only have one spear in the world at a time; the owner
- * has to pick it up again before throwing another one.</p>
+ * statistic on both sides. A player may keep one spear per layer in the world; the owner has to
+ * pick it up again before throwing another one on that layer.</p>
  */
 public class DreamSpearItem extends Item {
     /** Same charge threshold as the trident. */
@@ -72,9 +72,9 @@ public class DreamSpearItem extends Item {
     /**
      * Charging a throw, or clearing the anchor that stands in the way of one.
      *
-     * <p>A player can only have one anchor at a time, so a spear with an anchor already bound refuses
-     * to charge; the hotbar hint tells the player to sneak-use instead. Sneak-use destroys the bound
-     * spear on the server and does not start a throw.</p>
+     * <p>Each layer can hold one anchor, so a spear refuses to charge while its own layer already has
+     * one; the hotbar hint tells the player to sneak-use instead. Sneak-use destroys the bound spear
+     * of the layer the player is on and does not start a throw.</p>
      */
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
@@ -92,27 +92,39 @@ public class DreamSpearItem extends Item {
         return InteractionResultHolder.consume(stack);
     }
 
-    /** {@return whether an anchor is already bound to this player} */
+    /** {@return whether this player's current layer already has an anchor} */
     private static boolean hasAnchor(Player player) {
+        boolean dreamSide = isDreaming(player);
         if (player.level.isClientSide) {
-            // The server mirrors the flag to the client; the anchored spear itself may be out of view.
-            return DreamClientState.isAnchorBound();
+            // The server mirrors the flags to the client; the anchored spear itself may be out of view.
+            return DreamClientState.isAnchorBound(dreamSide);
         }
-        return player instanceof ServerPlayer serverPlayer && DreamManager.hasAnchor(serverPlayer);
+        return player instanceof ServerPlayer serverPlayer
+                && DreamManager.hasAnchor(serverPlayer, dreamSide);
     }
 
-    /** Removes the spear the player has anchored, freeing the slot for a new throw. */
+    /** {@return whether the player is currently on the dream layer} */
+    private static boolean isDreaming(Player player) {
+        if (player.level.isClientSide) {
+            return DreamClientState.isDreaming();
+        }
+        return player instanceof ServerPlayer serverPlayer && DreamManager.isDreaming(serverPlayer);
+    }
+
+    /** Removes the anchor of the player's current layer, freeing the slot for a new throw. */
     private static void destroyBoundSpear(Player player) {
         MinecraftServer server = player.getServer();
         if (server == null) {
             return;
         }
         UUID owner = player.getUUID();
+        boolean dreamSide = isDreaming(player);
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getEntities().getAll()) {
                 if (entity instanceof DreamSpearEntity spear
                         && owner.equals(spear.owner())
-                        && spear.isAnchored()) {
+                        && spear.isAnchored()
+                        && spear.dreamSide() == dreamSide) {
                     spear.destroyAnchor();
                     return;
                 }
@@ -120,7 +132,7 @@ public class DreamSpearItem extends Item {
         }
         // Nothing anchored any more: make sure a stale record cannot block the next throw.
         if (player instanceof ServerPlayer serverPlayer) {
-            DreamManager.clearAnchor(serverPlayer);
+            DreamManager.clearAnchor(serverPlayer, dreamSide);
         }
     }
 
@@ -134,7 +146,7 @@ public class DreamSpearItem extends Item {
             return;
         }
         if (hasThrownSpear(player)) {
-            // One anchor per player: the spear has to come back before another one may fly.
+            // One anchor per layer: the spear has to come back before another one may fly.
             return;
         }
         if (!level.isClientSide && player instanceof ServerPlayer serverPlayer
@@ -183,16 +195,19 @@ public class DreamSpearItem extends Item {
         }
     }
 
-    /** {@return whether the player already has a thrown spear anywhere in the world} */
+    /** {@return whether the player already has a thrown spear on the current layer} */
     private static boolean hasThrownSpear(Player player) {
         MinecraftServer server = player.getServer();
         if (server == null) {
             return false;
         }
         UUID owner = player.getUUID();
+        boolean dreamSide = isDreaming(player);
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getEntities().getAll()) {
-                if (entity instanceof DreamSpearEntity spear && owner.equals(spear.owner())) {
+                if (entity instanceof DreamSpearEntity spear
+                        && owner.equals(spear.owner())
+                        && spear.dreamSide() == dreamSide) {
                     return true;
                 }
             }

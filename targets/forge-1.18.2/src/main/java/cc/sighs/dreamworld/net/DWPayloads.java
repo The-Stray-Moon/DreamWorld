@@ -83,7 +83,7 @@ public final class DWPayloads {
                     blast.count());
         }
         if (packet instanceof DreamPackets.AnchorState anchor) {
-            return new AnchorStateMessage(anchor.bound());
+            return new AnchorStateMessage(anchor.realSideBound(), anchor.dreamSideBound());
         }
         if (packet instanceof DreamPackets.Dreamers dreamers) {
             return new DreamersMessage(List.copyOf(dreamers.dreamers()));
@@ -260,18 +260,19 @@ public final class DWPayloads {
         }
     }
 
-    public record AnchorStateMessage(boolean bound) {
+    public record AnchorStateMessage(boolean realSideBound, boolean dreamSideBound) {
         public static void encode(AnchorStateMessage message, FriendlyByteBuf buffer) {
-            buffer.writeBoolean(message.bound());
+            buffer.writeBoolean(message.realSideBound());
+            buffer.writeBoolean(message.dreamSideBound());
         }
 
         public AnchorStateMessage(FriendlyByteBuf buffer) {
-            this(buffer.readBoolean());
+            this(buffer.readBoolean(), buffer.readBoolean());
         }
 
         public static void handle(AnchorStateMessage message, Supplier<NetworkEvent.Context> context) {
             enqueue(context, () -> DWClientPayloadHandler.handleAnchorState(
-                    new DreamPackets.AnchorState(message.bound())));
+                    new DreamPackets.AnchorState(message.realSideBound(), message.dreamSideBound())));
         }
     }
 

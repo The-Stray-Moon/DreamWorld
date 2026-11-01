@@ -55,6 +55,7 @@ public final class FabricClientEvents {
             DreamBlink.tick();
             DreamWeather.tick();
             DreamBoatTrail.tick();
+            DreamHud.tick();
         });
 
         // 26.1 draws the level from submitted geometry: the tunnels go in with the custom geometry
@@ -63,7 +64,6 @@ public final class FabricClientEvents {
                 context.levelState(), context.poseStack(), context.submitNodeCollector()));
 
         HudElementRegistry.addLast(HUD_ELEMENT, (graphics, deltaTracker) -> {
-            DreamHud.render(graphics);
             DreamBlink.renderGui(graphics);
         });
 

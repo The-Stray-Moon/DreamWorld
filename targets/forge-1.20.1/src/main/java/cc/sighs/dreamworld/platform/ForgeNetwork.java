@@ -60,7 +60,7 @@ public final class ForgeNetwork implements DreamNetwork {
                     blast.radius(), blast.count());
         }
         if (packet instanceof DreamPackets.AnchorState anchor) {
-            return new ForgeMessages.AnchorState(anchor.bound());
+            return new ForgeMessages.AnchorState(anchor.realSideBound(), anchor.dreamSideBound());
         }
         if (packet instanceof DreamPackets.Dreamers dreamers) {
             return new ForgeMessages.Dreamers(List.copyOf(dreamers.dreamers()));

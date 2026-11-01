@@ -156,14 +156,18 @@ public final class DWPayloads {
         }
     }
 
-    public record AnchorStatePayload(boolean bound) implements CustomPacketPayload {
+    public record AnchorStatePayload(boolean realSideBound, boolean dreamSideBound)
+            implements CustomPacketPayload {
         public static final Type<AnchorStatePayload> TYPE = new Type<>(id("anchor_state"));
         public static final StreamCodec<RegistryFriendlyByteBuf, AnchorStatePayload> STREAM_CODEC =
-                StreamCodec.of((buffer, payload) -> buffer.writeBoolean(payload.bound()),
-                        buffer -> new AnchorStatePayload(buffer.readBoolean()));
+                StreamCodec.of((buffer, payload) -> {
+                            buffer.writeBoolean(payload.realSideBound());
+                            buffer.writeBoolean(payload.dreamSideBound());
+                        },
+                        buffer -> new AnchorStatePayload(buffer.readBoolean(), buffer.readBoolean()));
 
         public DreamPackets.AnchorState common() {
-            return new DreamPackets.AnchorState(bound);
+            return new DreamPackets.AnchorState(realSideBound, dreamSideBound);
         }
 
         @Override

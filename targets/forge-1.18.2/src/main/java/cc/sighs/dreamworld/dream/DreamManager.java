@@ -28,20 +28,20 @@ import net.minecraft.world.level.block.state.BlockState;
  * from {@link DreamPatches}. The sleeping body exists only on the clients of the other players, which
  * render a dreaming player lying down from the broadcast dreamer list.</p>
  *
- * <p>The optional anchor of a thrown dream alloy spear is bound to the layer it was thrown on and
- * decides everything that crosses the mirror: where an intrusion lands on the other side, and where
- * the dreamer comes back when waking. A spear thrown in reality pulls the dreamer out of the dream
- * and pins dream-side intrusions; a spear thrown inside the dream pins real-side intrusions. Spears
- * stuck in a creature follow that creature instead of a fixed position.</p>
+ * <p>Each layer can hold one anchor of a thrown dream alloy spear. An anchor does not name a
+ * transfer position: it names where the player stands on that layer, and an intrusion keeps the
+ * player-relative offset when it crosses the mirror. A spear stuck in a creature follows that
+ * creature instead of a fixed position.</p>
  */
 public final class DreamManager {
     private static final String ROOT = "DreamWorld";
     private static final String DREAMING = "Dreaming";
-    private static final String ANCHOR_DIM = "AnchorDim";
-    private static final String ANCHOR_POS = "AnchorPos";
-    private static final String ANCHOR_ENTITY = "AnchorEntity";
-    /** Layer the anchor lives on, so each side's intrusions can land on the other one. */
-    private static final String ANCHOR_DREAM_SIDE = "AnchorDreamSide";
+    private static final String REAL_ANCHOR_DIM = "RealAnchorDim";
+    private static final String REAL_ANCHOR_POS = "RealAnchorPos";
+    private static final String REAL_ANCHOR_ENTITY = "RealAnchorEntity";
+    private static final String DREAM_ANCHOR_DIM = "DreamAnchorDim";
+    private static final String DREAM_ANCHOR_POS = "DreamAnchorPos";
+    private static final String DREAM_ANCHOR_ENTITY = "DreamAnchorEntity";
     /** How many blocks a buried body may be lifted during login before giving up. */
     private static final int SETTLE_SCAN_HEIGHT = 32;
 
@@ -102,10 +102,9 @@ public final class DreamManager {
     /**
      * Starts the dream.
      *
-     * <p>The body starts where it is unless a spear was thrown inside the dream: that anchor names a
-     * dream position, so entering the dream has to move the body there for the promise "the dream
-     * always starts at the anchor" to hold. A spear thrown in reality is not consulted here - it is
-     * the way back out, not the way in.</p>
+     * <p>The body moves to the player's reference position on the dream side: the dream-side anchor
+     * when there is one, otherwise the real-side anchor mirrored by the shared coordinates. Without
+     * any anchor the body stays where it is.</p>
      */
     public static void enterDream(ServerPlayer player) {
         if (isDreaming(player)) {
@@ -113,10 +112,10 @@ public final class DreamManager {
         }
         refreshAnchor(player);
         setDreaming(player, true);
-        Destination destination = anchorDestination(player, true);
+        Destination destination = reference(player, true);
         if (destination != null) {
-            // The anchor was picked by this player inside the dream, so it is a valid dream spot even
-            // if reality holds a block there; settling afterwards would drag the body off it.
+            // The anchor was placed by this player, so it is a valid dream spot even if reality
+            // holds a block there; settling afterwards would drag the body off it.
             teleport(player, destination.level(), destination.pos(), true);
         } else {
             // The dream layer may have a block where reality has none; the body has to leave it or
@@ -139,44 +138,52 @@ public final class DreamManager {
             // Nobody may be left in the dream layer: its rabbits go with the last dreamer.
             DreamMobs.discardIfNoDreamers(level);
         }
-        Destination destination = anchorDestination(player, false);
+        Destination destination = reference(player, false);
         if (destination != null) {
             teleport(player, destination.level(), destination.pos());
         }
     }
 
     /**
-     * Destination of the bound anchor on one side of the mirror.
+     * The player's reference position on one layer.
      *
-     * <p>An anchor names a position on its own layer, so each direction only honours the anchor of
-     * the opposite side: a spear thrown in reality brings the dreamer back out, a spear thrown inside
-     * the dream brings them in. A block anchor resolves to its stored position, an entity anchor to
-     * wherever that entity currently stands.</p>
+     * <p>The anchor of that layer wins. When only the other layer has one, the shared coordinates
+     * mirror it here: a spear at home in reality also makes home the dream-side reference. Without
+     * any anchor the body itself is the reference. A block anchor resolves to its stored position,
+     * an entity anchor to wherever that entity currently stands.</p>
      *
-     * @param dreamSide whether the destination is wanted for entering the dream
+     * @param dreamSide whether the reference is wanted for the dream layer
      */
     @Nullable
-    private static Destination anchorDestination(ServerPlayer player, boolean dreamSide) {
+    private static Destination reference(ServerPlayer player, boolean dreamSide) {
+        Destination own = anchorOnSide(player, dreamSide);
+        return own != null ? own : anchorOnSide(player, !dreamSide);
+    }
+
+    @Nullable
+    private static Destination anchorOnSide(ServerPlayer player, boolean dreamSide) {
         MinecraftServer server = player.getServer();
-        if (server == null || isAnchorOnDreamSide(player) != dreamSide) {
+        if (server == null) {
             return null;
         }
-        Optional<BlockPos> anchorPos = anchorPos(player);
-        Optional<ResourceKey<Level>> anchorDim = anchorDimension(player);
-        if (anchorPos.isPresent() && anchorDim.isPresent()) {
-            ServerLevel level = server.getLevel(anchorDim.get());
-            if (level != null) {
-                return new Destination(level, anchorPos.get());
-            }
-        }
-        Optional<UUID> anchorEntity = anchorEntity(player);
+        Optional<UUID> anchorEntity = anchorEntity(player, dreamSide);
         if (anchorEntity.isPresent()) {
             Entity anchor = findEntity(server, anchorEntity.get());
             if (anchor != null && anchor.level instanceof ServerLevel level) {
                 return new Destination(level, anchor.blockPosition());
             }
+            return null;
         }
-        return null;
+        Optional<BlockPos> anchorPos = anchorPos(player, dreamSide);
+        if (anchorPos.isEmpty()) {
+            return null;
+        }
+        Optional<ResourceKey<Level>> anchorDim = anchorDimension(player, dreamSide);
+        ServerLevel level = anchorDim.map(server::getLevel).orElse(null);
+        if (level == null && player.level instanceof ServerLevel current) {
+            level = current;
+        }
+        return level == null ? null : new Destination(level, anchorPos.get());
     }
 
     /** Teleports without suffocating: a solid destination block moves the player one block up. */
@@ -242,10 +249,9 @@ public final class DreamManager {
     }
 
     /**
-     * Rebinds the anchor from the player's anchored dream alloy spear, or clears it when the spear
-     * is gone. A spear stuck in an entity anchors that entity, a spear lying in the world anchors
-     * its block position, and the layer the spear was thrown on is remembered with it. Spears of
-     * other players are ignored.
+     * Rebinds one anchor per layer from the player's anchored dream alloy spears. A spear stuck in
+     * an entity anchors that entity, a spear lying in the world anchors its block position, and the
+     * layer the spear was thrown on decides which slot it fills. Spears of other players are ignored.
      */
     public static void refreshAnchor(ServerPlayer player) {
         MinecraftServer server = player.getServer();
@@ -253,140 +259,161 @@ public final class DreamManager {
             return;
         }
         UUID ownerId = player.getUUID();
+        boolean[] found = new boolean[2];
         for (ServerLevel serverLevel : server.getAllLevels()) {
             for (Entity entity : serverLevel.getEntities().getAll()) {
-                if (entity instanceof DreamSpearEntity spear
-                        && ownerId.equals(spear.owner())
-                        && spear.isAnchored()) {
-                    bindSpearAnchor(player, spear, serverLevel);
-                    return;
+                if (!(entity instanceof DreamSpearEntity spear)
+                        || !ownerId.equals(spear.owner())
+                        || !spear.isAnchored()) {
+                    continue;
+                }
+                int slot = spear.dreamSide() ? 1 : 0;
+                if (found[slot]) {
+                    continue;
+                }
+                found[slot] = true;
+                UUID stuckIn = spear.anchoredEntity();
+                if (stuckIn != null) {
+                    writeEntityAnchor(player, stuckIn, spear.dreamSide());
+                } else {
+                    writeBlockAnchor(player, serverLevel.dimension(), spear.blockPosition(),
+                            spear.dreamSide());
                 }
             }
         }
-        clearAnchor(player);
-    }
-
-    /** Copies one spear's anchor data onto its owner. */
-    private static void bindSpearAnchor(ServerPlayer player, DreamSpearEntity spear,
-            ServerLevel level) {
-        UUID stuckIn = spear.anchoredEntity();
-        if (stuckIn != null) {
-            setEntityAnchor(player, stuckIn, spear.dreamSide());
-        } else {
-            setBlockAnchor(player, level.dimension(), spear.blockPosition(), spear.dreamSide());
+        if (!found[0]) {
+            removeAnchor(player, false);
         }
+        if (!found[1]) {
+            removeAnchor(player, true);
+        }
+        pushAnchorState(player);
     }
 
     // --------------------------------------------------------------- anchor
 
-    public static boolean hasAnchor(ServerPlayer player) {
+    /** {@return whether the layer has an anchor bound} */
+    public static boolean hasAnchor(ServerPlayer player, boolean dreamSide) {
         CompoundTag tag = tag(player);
-        return tag.contains(ANCHOR_POS) || tag.hasUUID(ANCHOR_ENTITY);
+        return tag.contains(posKey(dreamSide)) || tag.hasUUID(entityKey(dreamSide));
     }
 
-    /**
-     * Stores a block anchor together with the layer it was thrown on.
-     *
-     * <p>The layer matters from both ends: an intrusion on the dream side lands on a real-side
-     * anchor, and an intrusion on the real side lands on a dream-side anchor. Without it a spear
-     * thrown inside the dream could not pin anything, because the coordinates it names only make
-     * sense as a dream position.</p>
-     */
+    /** {@return whether either layer has an anchor bound} */
+    public static boolean hasAnchor(ServerPlayer player) {
+        return hasAnchor(player, false) || hasAnchor(player, true);
+    }
+
+    /** Stores a block anchor in the slot of the layer it was thrown on. */
     public static void setBlockAnchor(ServerPlayer player, ResourceKey<Level> dimension, BlockPos pos,
             boolean dreamSide) {
-        CompoundTag tag = tag(player);
-        tag.putString(ANCHOR_DIM, dimension.location().toString());
-        tag.putLong(ANCHOR_POS, pos.asLong());
-        tag.putBoolean(ANCHOR_DREAM_SIDE, dreamSide);
-        tag.remove(ANCHOR_ENTITY);
+        writeBlockAnchor(player, dimension, pos, dreamSide);
         pushAnchorState(player);
     }
 
+    private static void writeBlockAnchor(ServerPlayer player, ResourceKey<Level> dimension,
+            BlockPos pos, boolean dreamSide) {
+        CompoundTag tag = tag(player);
+        tag.putString(dimKey(dreamSide), dimension.location().toString());
+        tag.putLong(posKey(dreamSide), pos.asLong());
+        tag.remove(entityKey(dreamSide));
+    }
+
+    /** Stores an entity anchor in the slot of the layer it was thrown on. */
     public static void setEntityAnchor(ServerPlayer player, UUID entityId, boolean dreamSide) {
-        CompoundTag tag = tag(player);
-        tag.putUUID(ANCHOR_ENTITY, entityId);
-        tag.putBoolean(ANCHOR_DREAM_SIDE, dreamSide);
-        tag.remove(ANCHOR_POS);
-        tag.remove(ANCHOR_DIM);
+        writeEntityAnchor(player, entityId, dreamSide);
         pushAnchorState(player);
     }
 
-    public static void clearAnchor(ServerPlayer player) {
+    private static void writeEntityAnchor(ServerPlayer player, UUID entityId, boolean dreamSide) {
         CompoundTag tag = tag(player);
-        tag.remove(ANCHOR_DIM);
-        tag.remove(ANCHOR_POS);
-        tag.remove(ANCHOR_ENTITY);
-        tag.remove(ANCHOR_DREAM_SIDE);
+        tag.putUUID(entityKey(dreamSide), entityId);
+        tag.remove(posKey(dreamSide));
+        tag.remove(dimKey(dreamSide));
+    }
+
+    /** Clears the anchor of one layer, leaving the other layer's anchor alone. */
+    public static void clearAnchor(ServerPlayer player, boolean dreamSide) {
+        removeAnchor(player, dreamSide);
         pushAnchorState(player);
+    }
+
+    /** Clears both anchors. */
+    public static void clearAnchor(ServerPlayer player) {
+        removeAnchor(player, false);
+        removeAnchor(player, true);
+        pushAnchorState(player);
+    }
+
+    private static void removeAnchor(ServerPlayer player, boolean dreamSide) {
+        CompoundTag tag = tag(player);
+        tag.remove(dimKey(dreamSide));
+        tag.remove(posKey(dreamSide));
+        tag.remove(entityKey(dreamSide));
     }
 
     /**
-     * Tells the owning client whether an anchor is bound.
+     * Tells the owning client which layers have an anchor bound.
      *
      * <p>The hotbar hint and the refusal to start a throw both live on the client, and the client
      * cannot work the answer out on its own: the anchored spear is a server entity that may sit far
-     * away or in a chunk the client does not track. Login re-pushes it, because the flag is derived
-     * from saved data.</p>
+     * away or in a chunk the client does not track. Login re-pushes it, because the flags are derived
+     * from the anchored spears.</p>
      */
     public static void pushAnchorState(ServerPlayer player) {
         DreamPlatform.get().network().sendToPlayer(player,
-                new DreamPackets.AnchorState(hasAnchor(player)));
+                new DreamPackets.AnchorState(hasAnchor(player, false), hasAnchor(player, true)));
     }
 
-    /** {@return whether the bound anchor lives on the dream layer} */
-    public static boolean isAnchorOnDreamSide(ServerPlayer player) {
-        return tag(player).getBoolean(ANCHOR_DREAM_SIDE);
-    }
-
-    public static Optional<ResourceKey<Level>> anchorDimension(ServerPlayer player) {
+    public static Optional<ResourceKey<Level>> anchorDimension(ServerPlayer player, boolean dreamSide) {
         CompoundTag tag = tag(player);
-        if (!tag.contains(ANCHOR_DIM)) {
+        String key = dimKey(dreamSide);
+        if (!tag.contains(key)) {
             return Optional.empty();
         }
-        ResourceLocation id = ResourceLocation.tryParse(tag.getString(ANCHOR_DIM));
+        ResourceLocation id = ResourceLocation.tryParse(tag.getString(key));
         return id == null ? Optional.empty()
                 : Optional.of(ResourceKey.create(Registry.DIMENSION_REGISTRY, id));
     }
 
-    public static Optional<BlockPos> anchorPos(ServerPlayer player) {
+    public static Optional<BlockPos> anchorPos(ServerPlayer player, boolean dreamSide) {
         CompoundTag tag = tag(player);
-        if (!tag.contains(ANCHOR_POS)) {
+        String key = posKey(dreamSide);
+        if (!tag.contains(key)) {
             return Optional.empty();
         }
-        return Optional.of(BlockPos.of(tag.getLong(ANCHOR_POS)));
+        return Optional.of(BlockPos.of(tag.getLong(key)));
     }
 
-    public static Optional<UUID> anchorEntity(ServerPlayer player) {
+    public static Optional<UUID> anchorEntity(ServerPlayer player, boolean dreamSide) {
         CompoundTag tag = tag(player);
-        return tag.hasUUID(ANCHOR_ENTITY) ? Optional.of(tag.getUUID(ANCHOR_ENTITY)) : Optional.empty();
+        String key = entityKey(dreamSide);
+        return tag.hasUUID(key) ? Optional.of(tag.getUUID(key)) : Optional.empty();
+    }
+
+    /** {@return the block position the player occupies on {@code dreamSide}} */
+    public static BlockPos referencePos(ServerPlayer player, boolean dreamSide) {
+        Destination reference = reference(player, dreamSide);
+        return reference != null ? reference.pos() : player.blockPosition();
     }
 
     /**
      * Resolves where an intrusion lands.
      *
-     * <p>The anchor names a position on its own layer, so it only replaces {@code at} when the actor
-     * intrudes on the other layer - a spear thrown in reality pins dream-side intrusions, a spear
-     * thrown in the dream pins real-side ones. An entity anchor resolves to wherever that entity
-     * currently stands, which is what makes "anchor to a creature" follow it around.</p>
+     * <p>The offset of {@code at} from the player's body is kept, and the reference position of the
+     * target layer becomes the new origin: breaking a block next to the player on one layer places
+     * its copy next to the player on the other one. The anchor changes that origin, not the offset,
+     * which is what lets a single spear at home carry a distant tower home.</p>
      */
     public static BlockPos intrusionTarget(ServerPlayer player, BlockPos at) {
-        if (!hasAnchor(player) || isAnchorOnDreamSide(player) == isDreaming(player)) {
-            // No anchor, or an anchor on the same layer as the intrusion: nothing to redirect to.
+        BlockPos body = player.blockPosition();
+        BlockPos reference = referencePos(player, !isDreaming(player));
+        if (reference.equals(body)) {
             return at;
         }
-        Optional<BlockPos> anchorPos = anchorPos(player);
-        if (anchorPos.isPresent()) {
-            return anchorPos.get();
-        }
-        Optional<UUID> anchorEntity = anchorEntity(player);
-        MinecraftServer server = player.getServer();
-        if (anchorEntity.isPresent() && server != null) {
-            Entity entity = findEntity(server, anchorEntity.get());
-            if (entity != null) {
-                return entity.blockPosition();
-            }
-        }
-        return at;
+        return new BlockPos(
+                at.getX() + reference.getX() - body.getX(),
+                at.getY() + reference.getY() - body.getY(),
+                at.getZ() + reference.getZ() - body.getZ());
     }
 
     @Nullable
@@ -403,6 +430,18 @@ public final class DreamManager {
             }
         }
         return null;
+    }
+
+    private static String dimKey(boolean dreamSide) {
+        return dreamSide ? DREAM_ANCHOR_DIM : REAL_ANCHOR_DIM;
+    }
+
+    private static String posKey(boolean dreamSide) {
+        return dreamSide ? DREAM_ANCHOR_POS : REAL_ANCHOR_POS;
+    }
+
+    private static String entityKey(boolean dreamSide) {
+        return dreamSide ? DREAM_ANCHOR_ENTITY : REAL_ANCHOR_ENTITY;
     }
 
     private static CompoundTag tag(ServerPlayer player) {

@@ -338,6 +338,7 @@ public final class DreamSleepEvents {
      * client starts without.</p>
      */
     public static void onLogin(ServerPlayer player) {
+        DreamManager.refreshAnchor(player);
         DreamManager.pushAnchorState(player);
         // Always, dreaming or not: the client keeps the body frozen until it is told which layer it
         // is on, so a non-dreamer has to be told "awake" as well or it would stay stuck.

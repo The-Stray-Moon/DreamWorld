@@ -138,8 +138,12 @@ public final class DWPayloads {
                 .add();
 
         CHANNEL.messageBuilder(DreamPackets.AnchorState.class, 6, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder((message, buffer) -> buffer.writeBoolean(message.bound()))
-                .decoder(buffer -> new DreamPackets.AnchorState(buffer.readBoolean()))
+                .encoder((message, buffer) -> {
+                    buffer.writeBoolean(message.realSideBound());
+                    buffer.writeBoolean(message.dreamSideBound());
+                })
+                .decoder(buffer -> new DreamPackets.AnchorState(buffer.readBoolean(),
+                        buffer.readBoolean()))
                 .consumerMainThread((message, context) -> DistExecutor.unsafeRunWhenOn(
                         Dist.CLIENT, () -> () -> DWClientPayloadHandler.handleAnchorState(message)))
                 .add();

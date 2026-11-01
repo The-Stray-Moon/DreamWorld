@@ -22,7 +22,10 @@ public final class DreamClientState {
     private static volatile boolean dreaming;
     /** Whether the server has told this client which layer it should show in this session. */
     private static volatile boolean dreamStateKnown;
-    private static volatile boolean anchorBound;
+    /** Whether the real layer already has an anchor bound. */
+    private static volatile boolean realAnchorBound;
+    /** Whether the dream layer already has an anchor bound. */
+    private static volatile boolean dreamAnchorBound;
     /** Colour mode chosen for the current dream entry. */
     private static volatile boolean paletteSwapped;
     private static volatile List<BlockPos> graffiti = List.of();
@@ -85,13 +88,17 @@ public final class DreamClientState {
         dreamEntityIds = java.util.Set.copyOf(ids);
     }
 
-    /** Whether the local player has a dream alloy spear anchored; mirrored from the server. */
-    public static boolean isAnchorBound() {
-        return anchorBound;
+    /** Whether one layer has a dream alloy spear anchored; mirrored from the server. */
+    public static boolean isAnchorBound(boolean dreamSide) {
+        return dreamSide ? dreamAnchorBound : realAnchorBound;
     }
 
-    public static void setAnchorBound(boolean value) {
-        anchorBound = value;
+    public static void setAnchorBound(boolean dreamSide, boolean value) {
+        if (dreamSide) {
+            dreamAnchorBound = value;
+        } else {
+            realAnchorBound = value;
+        }
     }
 
     /** UUIDs of the players that are dreaming somewhere else, shown lying down on this client. */
@@ -119,7 +126,8 @@ public final class DreamClientState {
     public static void reset() {
         dreaming = false;
         dreamStateKnown = false;
-        anchorBound = false;
+        realAnchorBound = false;
+        dreamAnchorBound = false;
         paletteSwapped = false;
         graffiti = List.of();
         maxTunnelsPerGraffiti = 5;

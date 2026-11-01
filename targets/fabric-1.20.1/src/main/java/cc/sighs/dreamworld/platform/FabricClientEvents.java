@@ -47,6 +47,7 @@ public final class FabricClientEvents {
             DreamBlink.tick();
             DreamWeather.tick();
             DreamBoatTrail.tick();
+            DreamHud.tick();
         });
 
         WorldRenderEvents.AFTER_TRANSLUCENT.register(context ->
@@ -54,7 +55,6 @@ public final class FabricClientEvents {
         WorldRenderEvents.LAST.register(context ->
                 DreamBlink.renderLevel(context.tickDelta()));
         HudRenderCallback.EVENT.register((graphics, delta) -> {
-            DreamHud.render(graphics);
             DreamBlink.renderGui(graphics);
         });
 
